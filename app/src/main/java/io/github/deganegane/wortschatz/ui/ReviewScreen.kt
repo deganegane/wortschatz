@@ -376,7 +376,7 @@ private fun SessionSummary(vm: AppViewModel, state: UiState) {
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 SummaryStat(s.reviewed.toString(), plural(s.reviewed, "kartica", "kartice", "kartica"))
                 SummaryStat(s.newSeen.toString(), plural(s.newSeen, "nova riječ", "nove riječi", "novih riječi"))
-                SummaryStat(s.again.toString(), "puta \"opet\"")
+                SummaryStat(s.again.toString(), plural(s.again, "put", "puta", "puta") + " „opet”")
             }
             Spacer(Modifier.height(12.dp))
             Text(

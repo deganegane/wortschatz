@@ -117,7 +117,7 @@ object Srs {
         val raw = Grade.entries.associateWith { schedule(c, it, today, retention).interval.roundToInt() }
         val good = raw.getValue(Grade.GOOD)
         val hard = min(raw.getValue(Grade.HARD), good)
-        val easy = max(raw.getValue(Grade.EASY), good + 1)
+        val easy = min(MAX_DAYS, max(raw.getValue(Grade.EASY), good + 1))
         return raw + mapOf(Grade.HARD to hard, Grade.EASY to easy)
     }
 

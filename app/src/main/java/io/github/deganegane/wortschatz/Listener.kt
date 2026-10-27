@@ -17,53 +17,72 @@ class Listener(
     private val onResult: (results: List<String>) -> Unit,
     private val onError: (message: String) -> Unit
 ) {
+    /** One recogniser for the app's lifetime; recreating it each time makes Google's busy. */
     private var recognizer: SpeechRecognizer? = null
+    private var partial = ""
 
     val available: Boolean get() = SpeechRecognizer.isRecognitionAvailable(context)
 
-    fun start() {
-        stop()
+    private fun obtain(): SpeechRecognizer? {
+        recognizer?.let { return it }
         val r = try {
             SpeechRecognizer.createSpeechRecognizer(context)
         } catch (e: Exception) {
-            onError("Prepoznavanje govora nije dostupno.")
-            return
+            return null
         }
-        recognizer = r
-        var partial = ""
         r.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) = onLevel(0f, "")
+            override fun onReadyForSpeech(params: Bundle?) {
+                if (recognizer === r) onLevel(0f, "")
+            }
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {
                 // Roughly -2..10 dB in practice.
-                onLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f), partial)
+                if (recognizer === r) onLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f), partial)
             }
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
             override fun onError(error: Int) {
+                if (recognizer !== r) return
                 when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> onResult(emptyList())
+                    SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_CLIENT ->
+                        if (partial.isNotBlank()) onResult(listOf(partial)) else onError("Nisam ništa čuo — pokušaj ponovno.")
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> onError("Aplikacija nema dopuštenje za mikrofon.")
                     SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
-                        onError("Prepoznavanje treba internet (ili preuzeti njemački offline paket).")
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> onError("Mikrofon je zauzet, pokušaj ponovno.")
+                        onError("Za prepoznavanje treba internet (ili preuzet njemački offline paket).")
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY, SpeechRecognizer.ERROR_SERVER_DISCONNECTED,
+                    SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> onError("Prepoznavanje je zauzeto, pokušaj ponovno.")
                     SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ->
                         onError("Njemački nije dostupan za prepoznavanje govora na ovom mobitelu.")
                     else -> onError("Prepoznavanje nije uspjelo (greška $error).")
                 }
-                release()
             }
             override fun onResults(results: Bundle?) {
-                val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: arrayListOf()
-                onResult(list.toList())
-                release()
+                if (recognizer !== r) return
+                val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.toList().orEmpty()
+                when {
+                    list.isNotEmpty() -> onResult(list)
+                    partial.isNotBlank() -> onResult(listOf(partial))
+                    else -> onError("Nisam ništa čuo — pokušaj ponovno.")
+                }
             }
             override fun onPartialResults(partialResults: Bundle?) {
+                if (recognizer !== r) return
                 partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: partial
                 onLevel(0.5f, partial)
             }
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
+        recognizer = r
+        return r
+    }
+
+    fun start() {
+        val r = obtain() ?: run {
+            onError("Prepoznavanje govora nije dostupno.")
+            return
+        }
+        r.cancel()
+        partial = ""
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "de-DE")
@@ -73,8 +92,7 @@ class Listener(
         try {
             r.startListening(intent)
         } catch (e: Exception) {
-            onError("Prepoznavanje govora nije uspjelo pokrenuti.")
-            release()
+            onError("Prepoznavanje govora nije se uspjelo pokrenuti.")
         }
     }
 
@@ -83,12 +101,13 @@ class Listener(
         recognizer?.stopListening()
     }
 
+    /** Abandon the current utterance (no callbacks follow). */
     fun stop() {
         recognizer?.cancel()
-        release()
     }
 
-    private fun release() {
+    fun destroy() {
+        recognizer?.cancel()
         recognizer?.destroy()
         recognizer = null
     }
@@ -99,17 +118,34 @@ object SpeechCheck {
 
     private val ARTICLES = setOf("der", "die", "das")
 
+    private val NUMBERS = mapOf(
+        "0" to "null", "1" to "eins", "2" to "zwei", "3" to "drei", "4" to "vier", "5" to "fünf",
+        "6" to "sechs", "7" to "sieben", "8" to "acht", "9" to "neun", "10" to "zehn", "11" to "elf",
+        "12" to "zwölf", "20" to "zwanzig", "30" to "dreißig", "50" to "fünfzig", "100" to "hundert",
+        "1000" to "tausend"
+    )
+
+    /** Accents that aren't part of German spelling ("Café" → "cafe"); ä/ö/ü stay. */
+    private fun stripForeign(s: String): String =
+        s.replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('á', 'a').replace('à', 'a')
+            .replace('í', 'i').replace('ó', 'o').replace('ú', 'u').replace('ç', 'c')
+
     fun normalize(s: String): String =
-        s.lowercase()
-            .replace("ß", "ss")
+        stripForeign(s.lowercase())
             .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
             .trim()
+            .split(' ')
+            .filter { it.isNotEmpty() }
+            .joinToString(" ") { NUMBERS[it] ?: it }
+            .replace("ß", "ss")
 
     fun tokens(s: String): List<String> = normalize(s).split(' ').filter { it.isNotEmpty() }
 
     /** Same word, allowing one slip for longer words (recognisers mangle endings). */
     fun same(a: String, b: String): Boolean {
         if (a == b) return true
+        if (a == "eins" && (b == "ein" || b == "eine")) return true
+        if (b == "eins" && (a == "ein" || a == "eine")) return true
         val n = maxOf(a.length, b.length)
         return n >= 5 && distance(a, b) <= 1
     }
@@ -127,7 +163,12 @@ object SpeechCheck {
     fun checkWord(word: Word, results: List<String>): SpokenCheck {
         if (results.isEmpty()) return SpokenCheck(Verdict.WRONG, "")
         val target = tokens(word.de.replace(Regex("^sich "), ""))
-        val alternatives = if (word.rank == 1) listOf(listOf("der"), listOf("die"), listOf("das")) else listOf(target)
+        val alternatives = when {
+            word.rank == 1 -> listOf(listOf("der"), listOf("die"), listOf("das"))
+            // "E-Mail" may come back as "Email", "wie viel" as "wieviel".
+            target.size > 1 -> listOf(target, listOf(target.joinToString("")))
+            else -> listOf(target)
+        }
         var almost: SpokenCheck? = null
         for (heard in results) {
             val hay = tokens(heard)
@@ -157,10 +198,17 @@ object SpeechCheck {
             val hay = tokens(heard)
             if (parts.all { containsPhrase(hay, it) >= 0 }) return SpokenCheck(Verdict.CORRECT, heard)
         }
-        // Separable verb with only the stem said, etc.
+        // Separable verb with only the main part said ("stehe" without "auf").
+        if (parts.size > 1) {
+            val main = parts.maxBy { p -> p.sumOf { it.length } }
+            for (heard in results) {
+                if (containsPhrase(tokens(heard), main) >= 0) return SpokenCheck(Verdict.ALMOST, heard)
+            }
+        }
+        // The dictionary form instead of the one the sentence needs ("aufstehen" for "stehe … auf").
+        val base = tokens(word.de.removePrefix("sich "))
         for (heard in results) {
-            val hay = tokens(heard)
-            if (parts.size > 1 && parts.any { containsPhrase(hay, it) >= 0 }) return SpokenCheck(Verdict.ALMOST, heard)
+            if (containsPhrase(tokens(heard), base) >= 0) return SpokenCheck(Verdict.ALMOST, heard)
         }
         return SpokenCheck(Verdict.WRONG, results.first())
     }

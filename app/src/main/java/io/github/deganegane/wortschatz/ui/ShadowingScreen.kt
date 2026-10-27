@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.deganegane.wortschatz.AppViewModel
 import io.github.deganegane.wortschatz.UiState
+import io.github.deganegane.wortschatz.plural
 import kotlinx.coroutines.delay
 
 /**
@@ -79,7 +80,7 @@ fun ShadowingScreen(vm: AppViewModel, state: UiState) {
                     Text("Sehr gut!", style = MaterialTheme.typography.displaySmall, color = cs.primary)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Ponovio si ${sh.done} rečenica naglas.",
+                        "Ponovio si ${sh.done} ${plural(sh.done, "rečenicu", "rečenice", "rečenica")} naglas.",
                         style = MaterialTheme.typography.titleMedium,
                         textAlign = TextAlign.Center
                     )

@@ -80,7 +80,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         onError = { msg -> _state.update { it.copy(listen = ListenState(ListenPhase.ERROR, error = msg)) } }
     )
 
-    val recognitionAvailable: Boolean get() = listener.available
+    val recognitionAvailable: Boolean by lazy { listener.available }
 
     init {
         viewModelScope.launch {
@@ -110,6 +110,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Listening --------------------------------------------------------
 
     fun listen() {
+        if (_state.value.listen.phase == ListenPhase.LISTENING) return
         speech.stop()
         listenFor = if (_state.value.shadowing != null && _state.value.session == null) ListenFor.SHADOW else ListenFor.REVIEW
         _state.update { it.copy(listen = ListenState(ListenPhase.LISTENING)) }
@@ -118,7 +119,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun micDenied() {
         _state.update {
-            it.copy(listen = ListenState(ListenPhase.ERROR, error = "Bez dopuštenja za mikrofon ne mogu čuti odgovor. Dodirni \"Prikaži\" ili dopusti mikrofon u postavkama."))
+            it.copy(listen = ListenState(ListenPhase.ERROR, error = "Bez dopuštenja za mikrofon ne mogu čuti odgovor. Dodirni „Ne znam” ili dopusti mikrofon u postavkama."))
         }
     }
 
@@ -147,7 +148,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         session = session.copy(revealed = true, check = check)
                     )
                 }
-                speak(if (item.mode == Mode.CLOZE) word.example else word.spoken())
+                if (s.settings.autoSpeak) speak(if (item.mode == Mode.CLOZE) word.example else word.spoken())
             }
             ListenFor.SHADOW -> {
                 val sh = s.shadowing ?: return
@@ -258,13 +259,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         listener.stop()
         val s = _state.value
         val sh = s.shadowing ?: return
-        val day = s.todayStat.let { it.copy(shadowed = it.shadowed + 1) }
-        val days = s.days + (s.today to day)
+        val tried = sh.attempts > 0
+        val days = if (tried) s.days + (s.today to s.todayStat.let { it.copy(shadowed = it.shadowed + 1) }) else s.days
         _state.update {
             it.copy(
                 days = days,
                 listen = ListenState(),
-                shadowing = sh.copy(index = sh.index + 1, match = null, heard = "", attempts = 0, done = sh.done + 1)
+                shadowing = sh.copy(index = sh.index + 1, match = null, heard = "", attempts = 0, done = sh.done + if (tried) 1 else 0)
             )
         }
         persist(days = days)
@@ -347,7 +348,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         speech.shutdown()
-        listener.stop()
+        listener.destroy()
         super.onCleared()
     }
 }
