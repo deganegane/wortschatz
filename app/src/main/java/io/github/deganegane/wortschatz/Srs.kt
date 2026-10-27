@@ -15,11 +15,13 @@ object Srs {
 
     fun schedule(card: Card, grade: Grade, today: Long): Card {
         val fresh = card.status != Status.LEARNING || card.reps == 0
+        // Already failed today and being repeated in the session: don't punish twice.
+        val relearning = !fresh && card.interval < 1
         val i = card.interval
         var ease = card.ease
         val next: Double = when (grade) {
             Grade.AGAIN -> {
-                ease = max(1.3, ease - 0.2)
+                if (!relearning) ease = max(1.3, ease - 0.2)
                 0.0
             }
             Grade.HARD -> {
@@ -33,7 +35,7 @@ object Srs {
             }
             Grade.EASY -> {
                 ease += 0.15
-                if (fresh || i < 1) 4.0 else max(i + 2, i * ease * 1.3)
+                if (fresh || i < 2) 4.0 else max(i + 2, i * ease * 1.3)
             }
         }
         val days = next.roundToInt().coerceAtMost(365)
@@ -43,7 +45,7 @@ object Srs {
             ease = ease,
             due = today + days,
             reps = card.reps + 1,
-            lapses = if (grade == Grade.AGAIN && !fresh) card.lapses + 1 else card.lapses
+            lapses = if (grade == Grade.AGAIN && !fresh && !relearning) card.lapses + 1 else card.lapses
         )
     }
 

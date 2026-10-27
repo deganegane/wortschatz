@@ -119,7 +119,7 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp, vertical = 12.dp)
                 ) {
-                    CardFace(vm, qi, w, if (qi == item) revealed else true)
+                    CardFace(vm, qi, w, if (qi == item) revealed else true, isCurrent = qi == item)
                 }
             }
 
@@ -138,7 +138,7 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
 }
 
 @Composable
-private fun ColumnScope.CardFace(vm: AppViewModel, item: QueueItem, word: Word, revealed: Boolean) {
+private fun ColumnScope.CardFace(vm: AppViewModel, item: QueueItem, word: Word, revealed: Boolean, isCurrent: Boolean) {
     val cs = MaterialTheme.colorScheme
     Card(
         shape = MaterialTheme.shapes.extraLarge,
@@ -207,7 +207,7 @@ private fun ColumnScope.CardFace(vm: AppViewModel, item: QueueItem, word: Word, 
         }
     }
 
-    if (item.isNew) {
+    if (item.isNew && isCurrent) {
         Spacer(Modifier.height(8.dp))
         TextButton(onClick = { vm.skipAsKnown() }, modifier = Modifier.align(Alignment.End)) {
             Text("Već znam ovu riječ")

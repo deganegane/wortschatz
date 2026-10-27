@@ -20,7 +20,7 @@ data class UiState(
     val voice: VoiceState = VoiceState.LOADING,
     val session: Session? = null,
     /** Undo stack of the placement test: rank and the card it had before. */
-    val testUndo: List<Pair<Int, Card?>> = emptyList(),
+    val testUndo: List<Triple<Int, Card?, Card>> = emptyList(),
     val today: Long = today()
 ) {
     private val byRank: Map<Int, Word> by lazy { words.associateBy { it.rank } }
@@ -74,6 +74,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _state.update {
                 it.copy(loading = false, words = loaded.first, cards = loaded.second, days = loaded.third, today = today())
             }
+            // Alarms vanish after a force-stop; re-arm on every start.
+            Reminders.reschedule(getApplication(), _state.value.settings)
         }
     }
 
@@ -162,22 +164,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Placement test ---------------------------------------------------
 
-    fun testAnswer(known: Boolean) {
+    /** [rank] guards against a double answer (button tap during the swipe animation). */
+    fun testAnswer(rank: Int, known: Boolean) {
         val s = _state.value
-        val rank = s.nextTestRank ?: return
+        if (s.nextTestRank != rank) return
         val prev = s.cards[rank]
-        val cards = s.cards + (rank to Card(if (known) Status.KNOWN else Status.TO_LEARN))
+        val set = Card(if (known) Status.KNOWN else Status.TO_LEARN)
+        val cards = s.cards + (rank to set)
         val day = s.todayStat.let { it.copy(tested = it.tested + 1) }
         val days = s.days + (s.today to day)
         _state.update {
-            it.copy(cards = cards, days = days, testUndo = (it.testUndo + (rank to prev)).takeLast(50))
+            it.copy(cards = cards, days = days, testUndo = (it.testUndo + Triple(rank, prev, set)).takeLast(50))
         }
         persist(cards = cards, days = days)
     }
 
     fun testUndo() {
         val s = _state.value
-        val (rank, prev) = s.testUndo.lastOrNull() ?: return
+        val (rank, prev, set) = s.testUndo.lastOrNull() ?: return
+        if (s.cards[rank] != set) {
+            // The word has moved on since (learned, edited in the dictionary): don't undo that.
+            _state.update { it.copy(testUndo = it.testUndo.dropLast(1)) }
+            return
+        }
         val cards = if (prev == null) s.cards - rank else s.cards + (rank to prev)
         val day = s.todayStat.let { it.copy(tested = (it.tested - 1).coerceAtLeast(0)) }
         val days = s.days + (s.today to day)

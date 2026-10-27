@@ -24,7 +24,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        handleIntent(intent)
+        if (savedInstanceState == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) {
+            handleIntent(intent)
+        }
         addOnNewIntentListener { handleIntent(it) }
 
         setContent {

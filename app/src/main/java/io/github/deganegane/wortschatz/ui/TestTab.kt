@@ -128,7 +128,7 @@ fun TestTab(vm: AppViewModel, state: UiState, onStartLearning: () -> Unit) {
 
         SwipeCard(
             key = rank,
-            onSwipe = { known -> vm.testAnswer(known) }
+            onSwipe = { known -> vm.testAnswer(rank, known) }
         ) { tint ->
             Card(
                 shape = MaterialTheme.shapes.extraLarge,
@@ -179,12 +179,12 @@ fun TestTab(vm: AppViewModel, state: UiState, onStartLearning: () -> Unit) {
         val a = LocalArticles.current
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
-                onClick = { vm.testAnswer(false) },
+                onClick = { vm.testAnswer(rank, false) },
                 modifier = Modifier.weight(1f).height(56.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = a.bad)
             ) { Text("Ne znam", style = MaterialTheme.typography.titleMedium) }
             Button(
-                onClick = { vm.testAnswer(true) },
+                onClick = { vm.testAnswer(rank, true) },
                 modifier = Modifier.weight(1f).height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = a.good, contentColor = cs.surface)
             ) { Text("Znam", style = MaterialTheme.typography.titleMedium) }
