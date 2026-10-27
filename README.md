@@ -1,6 +1,6 @@
 # Wortschatz
 
-Osobna Android aplikacija za razgovorni njemački: 1000 najčešćih riječi, svaka s rodom,
+Osobna Android aplikacija za razgovorni njemački: do 4000 najčešćih riječi (razine po 1000, sljedeća se otključava na 80 % svladanog), svaka s rodom,
 množinom ili glagolskim oblicima, hrvatskim prijevodom i rečenicom kakvu bi Nijemac stvarno rekao.
 
 ## Kako radi
