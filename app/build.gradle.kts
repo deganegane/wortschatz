@@ -14,8 +14,8 @@ android {
         applicationId = "io.github.deganegane.wortschatz"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "2.1"
+        versionCode = 6
+        versionName = "2.1.1"
     }
 
     // One permanent key for every build, so each new APK installs over the previous one and
