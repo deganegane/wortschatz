@@ -57,7 +57,8 @@ class Store(ctx: Context) {
         reminderHour = prefs.getInt("reminderHour", 19),
         reminderMinute = prefs.getInt("reminderMinute", 0),
         themeMode = enumOr(prefs.getString("themeMode", null), ThemeMode.SYSTEM),
-        dynamicColor = prefs.getBoolean("dynamicColor", false)
+        dynamicColor = prefs.getBoolean("dynamicColor", false),
+        level = prefs.getInt("level", 1).coerceAtLeast(1)
     )
 
     fun saveSettings(s: Settings) {
@@ -73,6 +74,7 @@ class Store(ctx: Context) {
             .putInt("reminderMinute", s.reminderMinute)
             .putString("themeMode", s.themeMode.name)
             .putBoolean("dynamicColor", s.dynamicColor)
+            .putInt("level", s.level)
             .apply()
     }
 

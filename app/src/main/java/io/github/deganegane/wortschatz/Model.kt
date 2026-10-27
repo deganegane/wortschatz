@@ -74,6 +74,10 @@ enum class Status(val code: Int) {
 /** Interval (days) from which a learning word counts as "naučeno" (mastered). */
 const val MASTERED_DAYS = 21.0
 
+/** Words per level, and the share of a level that must be known or mastered to unlock the next. */
+const val LEVEL_SIZE = 1000
+const val UNLOCK_SHARE = 0.8
+
 const val BLANK = "_____"
 
 data class Card(
@@ -146,7 +150,9 @@ data class Settings(
     val reminderHour: Int = 19,
     val reminderMinute: Int = 0,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val dynamicColor: Boolean = false
+    val dynamicColor: Boolean = false,
+    /** Active list size in thousands: 1 = top 1000 … 4 = top 4000. */
+    val level: Int = 1
 )
 
 /** Activity of one calendar day. */

@@ -89,6 +89,11 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
         Spacer(Modifier.height(16.dp))
         PlanCard(vm, state)
 
+        if (state.canUnlock) {
+            Spacer(Modifier.height(16.dp))
+            UnlockCard(vm, state)
+        }
+
         Spacer(Modifier.height(16.dp))
         ShadowCard(vm)
 
@@ -103,7 +108,7 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
         }
 
         Spacer(Modifier.height(24.dp))
-        SectionTitle("Tvojih 1000 riječi")
+        SectionTitle("Tvojih ${state.words.size} riječi")
         BreakdownBar(state)
         Spacer(Modifier.height(12.dp))
         Legend(
@@ -216,6 +221,28 @@ private fun PlanCard(vm: AppViewModel, state: UiState) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun UnlockCard(vm: AppViewModel, state: UiState) {
+    val cs = MaterialTheme.colorScheme
+    val next = state.settings.level + 1
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+            Text("Razina svladana!", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Znaš ili si svladao ${state.solid} od ${state.words.size} riječi. Otključaj riječi " +
+                    "${state.words.size + 1}–${next * 1000}: idu u test i u dnevno učenje redom od najčešćih.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = { vm.setLevel(next) }) { Text("Otključaj ${next * 1000} riječi") }
         }
     }
 }

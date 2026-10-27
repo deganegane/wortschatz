@@ -23,7 +23,9 @@ data class UiState(
     val listen: ListenState = ListenState(),
     /** Undo stack of the placement test: rank and the card it had before. */
     val testUndo: List<Triple<Int, Card?, Card>> = emptyList(),
-    val today: Long = today()
+    val today: Long = today(),
+    /** Size of the whole bundled list (the active [words] are the first level × 1000). */
+    val allCount: Int = 0
 ) {
     private val byRank: Map<Int, Word> by lazy { words.associateBy { it.rank } }
     fun word(rank: Int): Word? = byRank[rank]
@@ -58,11 +60,24 @@ data class UiState(
             return minOf(budget, available)
         }
     val streak: Int get() = Srs.streak(days, today)
+
+    /** Levels the bundled list supports (4 with 4000 words). */
+    val maxLevel: Int get() = (allCount + LEVEL_SIZE - 1) / LEVEL_SIZE
+
+    /** Words of the active list you know or have mastered. */
+    val solid: Int get() = count(Bucket.KNOWN) + count(Bucket.MASTERED)
+
+    /** Needed for the next level. */
+    val unlockTarget: Int get() = (words.size * UNLOCK_SHARE).toInt()
+
+    val canUnlock: Boolean get() = settings.level < maxLevel && solid >= unlockTarget
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val store = Store(app)
+    /** The whole bundled list; [UiState.words] holds the active levels. */
+    private var allWords: List<Word> = emptyList()
     private val _state = MutableStateFlow(UiState(settings = store.loadSettings()))
     val state: StateFlow<UiState> = _state.asStateFlow()
 
@@ -88,7 +103,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 Triple(WordRepo.load(getApplication()), store.loadCards(), store.loadDays())
             }
             _state.update {
-                it.copy(loading = false, words = loaded.first, cards = loaded.second, days = loaded.third, today = today())
+                allWords = loaded.first
+                it.copy(
+                    loading = false,
+                    words = activeWords(it.settings.level),
+                    allCount = allWords.size,
+                    cards = loaded.second,
+                    days = loaded.third,
+                    today = today()
+                )
             }
             // Alarms vanish after a force-stop; re-arm on every start.
             Reminders.reschedule(getApplication(), _state.value.settings)
@@ -328,9 +351,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Settings ---------------------------------------------------------
 
+    private fun activeWords(level: Int): List<Word> = allWords.filter { it.rank <= level * LEVEL_SIZE }
+
+    /** Switch the active list to the top [level] × 1000 words. Progress on every word is kept. */
+    fun setLevel(level: Int) {
+        val l = level.coerceIn(1, maxOf(1, _state.value.maxLevel))
+        updateSettings { it.copy(level = l) }
+    }
+
     fun updateSettings(transform: (Settings) -> Settings) {
         val next = transform(_state.value.settings)
-        _state.update { it.copy(settings = next) }
+        _state.update {
+            it.copy(
+                settings = next,
+                words = if (next.level != it.settings.level) activeWords(next.level) else it.words
+            )
+        }
         store.saveSettings(next)
         Reminders.reschedule(getApplication(), next)
     }

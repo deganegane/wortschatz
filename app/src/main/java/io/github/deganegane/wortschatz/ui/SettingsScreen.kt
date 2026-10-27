@@ -21,6 +21,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import io.github.deganegane.wortschatz.UNLOCK_SHARE
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -87,6 +92,10 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
+            Group("Razina") {
+                LevelSection(vm, state)
+            }
+
             Group("Učenje") {
                 Label("Novih riječi dnevno", "Koliko novih riječi uvodiš svaki dan. 10 je dobra mjera uz par minuta ponavljanja.")
                 Choice(listOf(5, 10, 15, 20), s.newPerDay, { it.toString() }) { n -> vm.updateSettings { it.copy(newPerDay = n) } }
@@ -198,7 +207,7 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
             }
 
             Text(
-                "Wortschatz ${BuildConfigInfo.versionName(context)} · 1000 najčešćih riječi s primjerima za razgovor. " +
+                "Wortschatz ${BuildConfigInfo.versionName(context)} · ${state.allCount} najčešćih riječi s primjerima za razgovor. " +
                     "Font Space Grotesk (SIL Open Font License).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -234,6 +243,65 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
                 }) { Text("Resetiraj", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Odustani") } }
+        )
+    }
+}
+
+@Composable
+private fun LevelSection(vm: AppViewModel, state: UiState) {
+    val s = state.settings
+    var confirmEarly by remember { mutableStateOf(false) }
+    Text("Aktivna lista: ${s.level * 1000} najčešćih riječi", style = MaterialTheme.typography.titleSmall)
+    Spacer(Modifier.height(4.dp))
+    if (s.level < state.maxLevel) {
+        Text(
+            "Sljedećih 1000 otključava se kad znaš ili svladaš ${(UNLOCK_SHARE * 100).toInt()} % trenutne liste: " +
+                "${state.solid} / ${state.unlockTarget}.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(10.dp))
+        LinearProgressIndicator(
+            progress = { (state.solid.toFloat() / state.unlockTarget.coerceAtLeast(1)).coerceAtMost(1f) },
+            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)),
+            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = { vm.setLevel(s.level + 1) }, enabled = state.canUnlock) {
+                Text("Otključaj ${(s.level + 1) * 1000}")
+            }
+            Spacer(Modifier.width(8.dp))
+            if (!state.canUnlock) TextButton(onClick = { confirmEarly = true }) { Text("Ipak sada") }
+        }
+    } else {
+        Text(
+            "Otključane su sve riječi.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    if (s.level > 1) {
+        TextButton(onClick = { vm.setLevel(s.level - 1) }) { Text("Vrati na ${(s.level - 1) * 1000}") }
+    }
+
+    if (confirmEarly) {
+        AlertDialog(
+            onDismissRequest = { confirmEarly = false },
+            title = { Text("Otključati prije vremena?") },
+            text = {
+                Text(
+                    "Nove riječi dolaze tek kad potrošiš sve iz trenutne liste, pa se ništa ne gubi. " +
+                        "Ali češće riječi donose više u razgovoru — preporuka je prvo svladati ovu razinu."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.setLevel(s.level + 1)
+                    confirmEarly = false
+                }) { Text("Otključaj") }
+            },
+            dismissButton = { TextButton(onClick = { confirmEarly = false }) { Text("Odustani") } }
         )
     }
 }
