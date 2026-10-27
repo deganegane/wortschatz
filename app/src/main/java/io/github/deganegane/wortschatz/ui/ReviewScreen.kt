@@ -1,6 +1,12 @@
 package io.github.deganegane.wortschatz.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import io.github.deganegane.wortschatz.Mode
+import io.github.deganegane.wortschatz.POS_LABELS
+import io.github.deganegane.wortschatz.SpokenCheck
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -100,10 +106,17 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
             }
             // New words are shown with their meaning straight away.
             val revealed = session.revealed || item.isNew
+            val speaking = item.mode != Mode.RECOGNIZE && !item.isNew
+            val useMic = speaking && state.settings.speakAnswers && vm.recognitionAvailable
 
             LaunchedEffect(item.rank, session.reviewed, revealed) {
                 if (!state.settings.autoSpeak) return@LaunchedEffect
-                if (!item.reverse || revealed) vm.speak(word.spoken())
+                when {
+                    !speaking -> vm.speak(word.spoken())
+                    // After a spoken answer the correct version is already being played.
+                    revealed && session.check == null ->
+                        vm.speak(if (item.mode == Mode.CLOZE) word.example else word.spoken())
+                }
             }
 
             AnimatedContent(
@@ -113,24 +126,46 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
                 label = "card"
             ) { (qi, _) ->
                 val w = state.word(qi.rank) ?: word
+                val current = qi == item
                 Column(
                     Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp, vertical = 12.dp)
                 ) {
-                    CardFace(vm, qi, w, if (qi == item) revealed else true, isCurrent = qi == item)
+                    CardFace(
+                        vm = vm,
+                        item = qi,
+                        word = w,
+                        revealed = if (current) revealed else true,
+                        check = if (current) session.check else null,
+                        isCurrent = current
+                    )
                 }
             }
 
-            // Bottom: reveal or grade
+            // Bottom: microphone, reveal, or grade
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                if (!revealed) {
-                    Button(onClick = { vm.reveal() }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                when {
+                    revealed -> GradeButtons(
+                        onGrade = vm::answer,
+                        preview = Srs.preview(state.cards[item.rank], state.today, state.settings.retention),
+                        suggested = session.check?.suggested
+                    )
+                    useMic -> {
+                        val start = rememberMicStarter(onStart = vm::listen, onDenied = vm::micDenied)
+                        MicRow(
+                            listen = state.listen,
+                            hint = if (item.mode == Mode.CLOZE) "Izgovori riječ koja fali (ili cijelu rečenicu)" else "Reci riječ na njemačkom",
+                            onStart = start,
+                            onStop = vm::finishListening
+                        ) {
+                            TextButton(onClick = { vm.reveal() }) { Text("Ne znam") }
+                        }
+                    }
+                    else -> Button(onClick = { vm.reveal() }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                         Text("Prikaži odgovor", style = MaterialTheme.typography.titleMedium)
                     }
-                } else {
-                    GradeButtons(onGrade = vm::answer, card = state.cards[item.rank])
                 }
             }
         }
@@ -138,71 +173,121 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
 }
 
 @Composable
-private fun ColumnScope.CardFace(vm: AppViewModel, item: QueueItem, word: Word, revealed: Boolean, isCurrent: Boolean) {
+private fun ColumnScope.CardFace(
+    vm: AppViewModel,
+    item: QueueItem,
+    word: Word,
+    revealed: Boolean,
+    check: SpokenCheck?,
+    isCurrent: Boolean
+) {
     val cs = MaterialTheme.colorScheme
+    val mode = if (item.isNew) Mode.RECOGNIZE else item.mode
     Card(
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh),
-        modifier = Modifier.fillMaxWidth().clickable(enabled = !revealed) { vm.reveal() }
+        modifier = Modifier.fillMaxWidth().clickable(enabled = !revealed && mode == Mode.RECOGNIZE) { vm.reveal() }
     ) {
         Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (item.isNew) {
-                    Pill("NOVA RIJEČ", cs.primary, cs.onPrimary)
-                } else if (item.reverse) {
-                    Pill("HR → DE", cs.secondaryContainer, cs.onSecondaryContainer)
-                } else {
-                    Pill("#${word.rank}", cs.surfaceContainerHighest, cs.onSurfaceVariant)
+                when {
+                    item.isNew -> Pill("NOVA RIJEČ", cs.primary, cs.onPrimary)
+                    mode == Mode.RECALL -> Pill("RECI NA NJEMAČKOM", cs.secondaryContainer, cs.onSecondaryContainer)
+                    mode == Mode.CLOZE -> Pill("DOPUNI REČENICU", cs.tertiaryContainer, cs.onTertiaryContainer)
+                    else -> Pill("#${word.rank}", cs.surfaceContainerHighest, cs.onSurfaceVariant)
                 }
                 Spacer(Modifier.weight(1f))
-                if (!item.reverse || revealed) SpeakButton(onClick = { vm.speak(word.spoken()) })
+                if (mode == Mode.RECOGNIZE || revealed) SpeakButton(onClick = { vm.speak(word.spoken()) })
             }
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(24.dp))
 
-            if (item.reverse) {
-                // Front: Croatian meaning; back: the German word.
-                Text(word.hr, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Kako se to kaže na njemačkom?",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = cs.onSurfaceVariant
-                )
-                AnimatedVisibility(visible = revealed, enter = fadeIn() + expandVertically()) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Spacer(Modifier.height(20.dp))
-                        HorizontalDivider(color = cs.outlineVariant)
-                        Spacer(Modifier.height(20.dp))
-                        Headword(word, MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(8.dp))
-                        GrammarLine(word, center = true)
-                        Spacer(Modifier.height(20.dp))
-                        ExampleBlock(word, onSpeak = vm::speak)
+            when (mode) {
+                Mode.RECOGNIZE -> {
+                    Headword(word, MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(8.dp))
+                    GrammarLine(word, center = true)
+                    AnimatedVisibility(visible = revealed, enter = fadeIn() + expandVertically()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Spacer(Modifier.height(20.dp))
+                            HorizontalDivider(color = cs.outlineVariant)
+                            Spacer(Modifier.height(20.dp))
+                            Text(word.hr, style = MaterialTheme.typography.titleLarge, color = cs.primary, textAlign = TextAlign.Center)
+                            Spacer(Modifier.height(20.dp))
+                            ExampleBlock(word, onSpeak = vm::speak)
+                        }
+                    }
+                    if (!revealed) {
+                        Spacer(Modifier.height(24.dp))
+                        Text(
+                            "sjeti se značenja, pa provjeri",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = cs.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
                     }
                 }
-            } else {
-                Headword(word, MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(8.dp))
-                GrammarLine(word, center = true)
-                AnimatedVisibility(visible = revealed, enter = fadeIn() + expandVertically()) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Spacer(Modifier.height(20.dp))
-                        HorizontalDivider(color = cs.outlineVariant)
-                        Spacer(Modifier.height(20.dp))
-                        Text(word.hr, style = MaterialTheme.typography.titleLarge, color = cs.primary, textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(20.dp))
-                        ExampleBlock(word, onSpeak = vm::speak)
+
+                Mode.RECALL -> {
+                    Text(word.hr, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        when {
+                            word.article != null -> "imenica · reci je s članom"
+                            else -> POS_LABELS[word.pos] ?: ""
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = cs.onSurfaceVariant
+                    )
+                    AnimatedVisibility(visible = revealed, enter = fadeIn() + expandVertically()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Spacer(Modifier.height(20.dp))
+                            if (check != null) {
+                                FeedbackBanner(check, word, cloze = false)
+                                Spacer(Modifier.height(20.dp))
+                            } else {
+                                HorizontalDivider(color = cs.outlineVariant)
+                                Spacer(Modifier.height(20.dp))
+                            }
+                            Headword(word, MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center)
+                            Spacer(Modifier.height(8.dp))
+                            GrammarLine(word, center = true)
+                            Spacer(Modifier.height(20.dp))
+                            ExampleBlock(word, onSpeak = vm::speak)
+                        }
                     }
                 }
-            }
 
-            if (!revealed) {
-                Spacer(Modifier.height(24.dp))
-                Text(
-                    if (item.reverse) "reci naglas, pa provjeri" else "sjeti se značenja, pa provjeri",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = cs.onSurfaceVariant.copy(alpha = 0.7f)
-                )
+                Mode.CLOZE -> {
+                    val shown = if (revealed) highlighted(word, cs.primary) else AnnotatedString(word.clozeText ?: word.example)
+                    Text(shown, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        word.exampleHr,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                        color = cs.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    if (!revealed) {
+                        Spacer(Modifier.height(12.dp))
+                        Pill("tražena riječ: ${word.hrShort}", cs.surfaceContainerHighest, cs.onSurfaceVariant)
+                    }
+                    AnimatedVisibility(visible = revealed, enter = fadeIn() + expandVertically()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Spacer(Modifier.height(20.dp))
+                            if (check != null) {
+                                FeedbackBanner(check, word, cloze = true)
+                                Spacer(Modifier.height(16.dp))
+                            }
+                            TextButton(onClick = { vm.speak(word.example) }) { Text("Poslušaj rečenicu") }
+                            HorizontalDivider(color = cs.outlineVariant)
+                            Spacer(Modifier.height(16.dp))
+                            Headword(word, MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+                            Spacer(Modifier.height(6.dp))
+                            GrammarLine(word, center = true)
+                            Spacer(Modifier.height(8.dp))
+                            Text(word.hr, style = MaterialTheme.typography.titleMedium, color = cs.primary, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
             }
         }
     }
@@ -216,7 +301,7 @@ private fun ColumnScope.CardFace(vm: AppViewModel, item: QueueItem, word: Word, 
 }
 
 @Composable
-private fun GradeButtons(onGrade: (Grade) -> Unit, card: io.github.deganegane.wortschatz.Card?) {
+private fun GradeButtons(onGrade: (Grade) -> Unit, preview: Map<Grade, Int>, suggested: Grade?) {
     val cs = MaterialTheme.colorScheme
     val a = LocalArticles.current
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -227,7 +312,14 @@ private fun GradeButtons(onGrade: (Grade) -> Unit, card: io.github.deganegane.wo
                 Grade.GOOD -> cs.primary to cs.onPrimary
                 Grade.EASY -> cs.secondaryContainer to cs.onSecondaryContainer
             }
-            GradeButton(g, Srs.previewLabel(card, g), container, content, Modifier.weight(1f)) { onGrade(g) }
+            GradeButton(
+                grade = g,
+                sub = Srs.label(preview[g] ?: 0),
+                container = container,
+                content = content,
+                highlight = suggested == g,
+                modifier = Modifier.weight(1f)
+            ) { onGrade(g) }
         }
     }
 }
@@ -238,12 +330,14 @@ private fun GradeButton(
     sub: String,
     container: Color,
     content: Color,
+    highlight: Boolean,
     modifier: Modifier,
     onClick: () -> Unit
 ) {
     Button(
         onClick = onClick,
         modifier = modifier.height(64.dp),
+        border = if (highlight) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
         shape = MaterialTheme.shapes.medium,
         contentPadding = ButtonDefaults.TextButtonContentPadding,
         colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = content)

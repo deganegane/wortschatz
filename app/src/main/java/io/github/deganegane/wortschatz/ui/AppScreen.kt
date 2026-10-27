@@ -35,7 +35,7 @@ private enum class Tab(val label: String, val icon: Int) {
     DICTIONARY("Rječnik", R.drawable.ic_book)
 }
 
-private enum class Screen { MAIN, REVIEW, SETTINGS }
+private enum class Screen { MAIN, REVIEW, SHADOW, SETTINGS }
 
 @Composable
 fun AppScreen(vm: AppViewModel, state: UiState) {
@@ -49,6 +49,7 @@ fun AppScreen(vm: AppViewModel, state: UiState) {
 
     val screen = when {
         state.session != null -> Screen.REVIEW
+        state.shadowing != null -> Screen.SHADOW
         showSettings -> Screen.SETTINGS
         else -> Screen.MAIN
     }
@@ -65,6 +66,7 @@ fun AppScreen(vm: AppViewModel, state: UiState) {
     ) { target ->
         when (target) {
             Screen.REVIEW -> ReviewScreen(vm = vm, state = state)
+            Screen.SHADOW -> ShadowingScreen(vm = vm, state = state)
             Screen.SETTINGS -> SettingsScreen(vm = vm, state = state, onBack = { showSettings = false })
             Screen.MAIN -> Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,

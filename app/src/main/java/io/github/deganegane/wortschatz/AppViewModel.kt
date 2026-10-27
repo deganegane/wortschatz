@@ -19,6 +19,8 @@ data class UiState(
     val settings: Settings = Settings(),
     val voice: VoiceState = VoiceState.LOADING,
     val session: Session? = null,
+    val shadowing: Shadowing? = null,
+    val listen: ListenState = ListenState(),
     /** Undo stack of the placement test: rank and the card it had before. */
     val testUndo: List<Triple<Int, Card?, Card>> = emptyList(),
     val today: Long = today()
@@ -66,6 +68,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val speech = Speech(app) { voice -> _state.update { it.copy(voice = voice) } }
 
+    private enum class ListenFor { REVIEW, SHADOW }
+    private var listenFor = ListenFor.REVIEW
+
+    private val listener = Listener(
+        app,
+        onLevel = { level, partial ->
+            _state.update { it.copy(listen = ListenState(ListenPhase.LISTENING, level, partial)) }
+        },
+        onResult = { results -> onHeard(results) },
+        onError = { msg -> _state.update { it.copy(listen = ListenState(ListenPhase.ERROR, error = msg)) } }
+    )
+
+    val recognitionAvailable: Boolean get() = listener.available
+
     init {
         viewModelScope.launch {
             val loaded = withContext(Dispatchers.IO) {
@@ -89,6 +105,64 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun speak(text: String) = speech.speak(text, _state.value.settings.slowSpeech)
 
+    fun speakSlow(text: String) = speech.speak(text, slow = true)
+
+    // ---- Listening --------------------------------------------------------
+
+    fun listen() {
+        speech.stop()
+        listenFor = if (_state.value.shadowing != null && _state.value.session == null) ListenFor.SHADOW else ListenFor.REVIEW
+        _state.update { it.copy(listen = ListenState(ListenPhase.LISTENING)) }
+        listener.start()
+    }
+
+    fun micDenied() {
+        _state.update {
+            it.copy(listen = ListenState(ListenPhase.ERROR, error = "Bez dopuštenja za mikrofon ne mogu čuti odgovor. Dodirni \"Prikaži\" ili dopusti mikrofon u postavkama."))
+        }
+    }
+
+    /** Stop the microphone early; whatever was said so far is still evaluated. */
+    fun finishListening() = listener.finish()
+
+    fun cancelListening() {
+        listener.stop()
+        _state.update { it.copy(listen = ListenState()) }
+    }
+
+    private fun onHeard(results: List<String>) {
+        val s = _state.value
+        when (listenFor) {
+            ListenFor.REVIEW -> {
+                val session = s.session ?: return
+                val item = session.current ?: return
+                val word = s.word(item.rank) ?: return
+                val check = when (item.mode) {
+                    Mode.CLOZE -> SpeechCheck.checkCloze(word, results)
+                    else -> SpeechCheck.checkWord(word, results)
+                }
+                _state.update {
+                    it.copy(
+                        listen = ListenState(ListenPhase.DONE),
+                        session = session.copy(revealed = true, check = check)
+                    )
+                }
+                speak(if (item.mode == Mode.CLOZE) word.example else word.spoken())
+            }
+            ListenFor.SHADOW -> {
+                val sh = s.shadowing ?: return
+                val word = sh.current?.let { s.word(it) } ?: return
+                val match = SpeechCheck.matchSentence(word.example, results)
+                _state.update {
+                    it.copy(
+                        listen = ListenState(ListenPhase.DONE),
+                        shadowing = sh.copy(match = match, heard = results.firstOrNull() ?: "", attempts = sh.attempts + 1)
+                    )
+                }
+            }
+        }
+    }
+
     // ---- Review session ---------------------------------------------------
 
     /** [extraNew] lets you go past today's limit of new words ("Još 5 novih"). */
@@ -102,11 +176,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun closeSession() {
         speech.stop()
+        listener.stop()
         _state.update { it.copy(session = null) }
     }
 
     fun reveal() {
-        _state.update { st -> st.copy(session = st.session?.copy(revealed = true)) }
+        listener.stop()
+        _state.update { st -> st.copy(session = st.session?.copy(revealed = true), listen = ListenState()) }
     }
 
     fun answer(grade: Grade) {
@@ -115,7 +191,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val item = session.current ?: return
         val old = s.cards[item.rank]
         val wasNew = old == null || old.status != Status.LEARNING
-        val updated = Srs.schedule(old ?: Card(Status.TO_LEARN), grade, s.today)
+        listener.stop()
+        val updated = Srs.answer(old, grade, s.today, s.settings.retention)
 
         val cards = s.cards + (item.rank to updated)
         val day = s.todayStat.let { d ->
@@ -130,11 +207,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val next = session.copy(
             queue = rest,
             revealed = false,
+            check = null,
             reviewed = session.reviewed + 1,
             again = session.again + if (grade == Grade.AGAIN) 1 else 0,
             newSeen = session.newSeen + if (wasNew) 1 else 0
         )
-        _state.update { it.copy(cards = cards, days = days, session = next) }
+        _state.update { it.copy(cards = cards, days = days, session = next, listen = ListenState()) }
         persist(cards = cards, days = days)
     }
 
@@ -147,7 +225,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val inQueue = session.queue.map { it.rank }.toSet()
         val replacement = Srs.newCandidates(s.words, cards).firstOrNull { it !in inQueue }
         val rest = session.queue.drop(1).toMutableList()
-        if (replacement != null) rest.add(minOf(1, rest.size), QueueItem(replacement, reverse = false, isNew = true))
+        if (replacement != null) rest.add(minOf(1, rest.size), QueueItem(replacement, mode = Mode.RECOGNIZE, isNew = true))
         val dropped = if (replacement == null) 1 else 0
         _state.update {
             it.copy(
@@ -155,11 +233,51 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 session = session.copy(
                     queue = rest,
                     revealed = false,
+                    check = null,
                     plannedTotal = session.plannedTotal - dropped
                 )
             )
         }
         persist(cards = cards)
+    }
+
+    // ---- Shadowing --------------------------------------------------------
+
+    /** Ten sentences, mostly from words you already know or are learning. */
+    fun startShadowing(count: Int = 10) {
+        val s = _state.value
+        val familiar = s.words.filter {
+            val st = s.cards[it.rank]?.status
+            st == Status.KNOWN || st == Status.LEARNING
+        }.shuffled().take(count).map { it.rank }
+        val fill = s.words.map { it.rank }.filter { it !in familiar }.take(count - familiar.size)
+        _state.update { it.copy(shadowing = Shadowing((familiar + fill).shuffled()), listen = ListenState()) }
+    }
+
+    fun shadowNext() {
+        listener.stop()
+        val s = _state.value
+        val sh = s.shadowing ?: return
+        val day = s.todayStat.let { it.copy(shadowed = it.shadowed + 1) }
+        val days = s.days + (s.today to day)
+        _state.update {
+            it.copy(
+                days = days,
+                listen = ListenState(),
+                shadowing = sh.copy(index = sh.index + 1, match = null, heard = "", attempts = 0, done = sh.done + 1)
+            )
+        }
+        persist(days = days)
+    }
+
+    fun shadowRetry() {
+        _state.update { st -> st.copy(shadowing = st.shadowing?.copy(match = null, heard = ""), listen = ListenState()) }
+    }
+
+    fun closeShadowing() {
+        speech.stop()
+        listener.stop()
+        _state.update { it.copy(shadowing = null, listen = ListenState()) }
     }
 
     // ---- Placement test ---------------------------------------------------
@@ -229,6 +347,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         speech.shutdown()
+        listener.stop()
         super.onCleared()
     }
 }

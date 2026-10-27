@@ -14,10 +14,28 @@ data class Word(
     val forms: String?,
     val hr: String,
     val example: String,
-    val exampleHr: String
+    val exampleHr: String,
+    /** Parts of [example] that realise the headword (blanked out in cloze cards). */
+    val cloze: List<String> = emptyList()
 ) {
     /** Headword with its article, e.g. "das Haus". */
     val full: String get() = if (article != null) "$article $de" else de
+
+    /** First Croatian meaning, used as a hint ("planirati, namjeravati" -> "planirati"). */
+    val hrShort: String get() = hr.substringBefore(',').substringBefore(';').substringBefore(" (").trim()
+
+    /** The example with each cloze part replaced by a blank, or null when there is nothing to blank. */
+    val clozeText: String?
+        get() {
+            if (cloze.isEmpty()) return null
+            var t = example
+            for (part in cloze) {
+                val re = Regex("(?<![\\p{L}])" + Regex.escape(part) + "(?![\\p{L}])")
+                val m = re.find(t) ?: return null
+                t = t.replaceRange(m.range, BLANK)
+            }
+            return t
+        }
 
     /** Lower-case text used by the dictionary search. */
     val searchKey: String = "${de.lowercase()} ${hr.lowercase()} ${(article ?: "")}"
@@ -56,15 +74,22 @@ enum class Status(val code: Int) {
 /** Interval (days) from which a learning word counts as "naučeno" (mastered). */
 const val MASTERED_DAYS = 21.0
 
+const val BLANK = "_____"
+
 data class Card(
     val status: Status,
     /** Current interval in days (0 = still being learned today). */
     val interval: Double = 0.0,
-    val ease: Double = 2.5,
+    /** FSRS memory stability in days (0 = never reviewed). */
+    val stability: Double = 0.0,
+    /** FSRS difficulty, 1..10. */
+    val difficulty: Double = 0.0,
     /** Epoch day when the card is due next. */
     val due: Long = 0,
     val reps: Int = 0,
-    val lapses: Int = 0
+    val lapses: Int = 0,
+    /** Epoch day of the last review. */
+    val lastReview: Long = 0
 ) {
     val mastered: Boolean get() = status == Status.LEARNING && interval >= MASTERED_DAYS
 }
@@ -90,9 +115,19 @@ fun Card?.bucket(): Bucket = when {
 /** Answer buttons on a review card. */
 enum class Grade(val label: String) { AGAIN("Opet"), HARD("Teško"), GOOD("Dobro"), EASY("Lako") }
 
-enum class Direction(val label: String) {
-    DE_HR("DE → HR"),
-    HR_DE("HR → DE"),
+/** How a card asks for the word. */
+enum class Mode {
+    /** German shown, recall the meaning. */
+    RECOGNIZE,
+    /** Croatian shown, say the German word. */
+    RECALL,
+    /** Example sentence with a blank, say the missing word. */
+    CLOZE
+}
+
+enum class Practice(val label: String) {
+    CLASSIC("Klasično"),
+    SPEAKING("Govor"),
     MIXED("Mješovito")
 }
 
@@ -100,7 +135,11 @@ enum class ThemeMode(val label: String) { SYSTEM("Sustav"), LIGHT("Svijetla"), D
 
 data class Settings(
     val newPerDay: Int = 10,
-    val direction: Direction = Direction.DE_HR,
+    val practice: Practice = Practice.MIXED,
+    /** Answer speaking cards with the microphone (otherwise: think, then reveal). */
+    val speakAnswers: Boolean = true,
+    /** FSRS target probability of remembering a word when it comes up. */
+    val retention: Double = 0.9,
     val autoSpeak: Boolean = true,
     val slowSpeech: Boolean = false,
     val reminderOn: Boolean = false,
@@ -111,15 +150,14 @@ data class Settings(
 )
 
 /** Activity of one calendar day. */
-data class DayStat(val reviews: Int = 0, val newCards: Int = 0, val tested: Int = 0) {
-    val active: Boolean get() = reviews > 0 || tested > 0
+data class DayStat(val reviews: Int = 0, val newCards: Int = 0, val tested: Int = 0, val shadowed: Int = 0) {
+    val active: Boolean get() = reviews > 0 || tested > 0 || shadowed > 0
 }
 
 /** One card waiting in a review session. */
 data class QueueItem(
     val rank: Int,
-    /** true = show Croatian, recall German. */
-    val reverse: Boolean,
+    val mode: Mode,
     /** First time this word is studied. */
     val isNew: Boolean
 )
@@ -127,6 +165,8 @@ data class QueueItem(
 data class Session(
     val queue: List<QueueItem>,
     val revealed: Boolean = false,
+    /** Result of a spoken answer on the current card, if any. */
+    val check: SpokenCheck? = null,
     val reviewed: Int = 0,
     val again: Int = 0,
     val newSeen: Int = 0,
@@ -138,3 +178,45 @@ data class Session(
 }
 
 fun today(): Long = LocalDate.now().toEpochDay()
+
+/** Outcome of comparing what the recogniser heard with the expected answer. */
+data class SpokenCheck(
+    val verdict: Verdict,
+    /** Best transcript, shown back to the learner. */
+    val heard: String,
+    /** For nouns: the article that was said, when it was the wrong one. */
+    val wrongArticle: String? = null
+) {
+    val suggested: Grade
+        get() = when (verdict) {
+            Verdict.CORRECT -> Grade.GOOD
+            Verdict.ALMOST -> Grade.HARD
+            Verdict.WRONG -> Grade.AGAIN
+        }
+}
+
+enum class Verdict { CORRECT, ALMOST, WRONG }
+
+/** A shadowing round: listen to a sentence, repeat it aloud. */
+data class Shadowing(
+    val ranks: List<Int>,
+    val index: Int = 0,
+    /** Per-token match of the last attempt on the current sentence, null before trying. */
+    val match: List<Boolean>? = null,
+    val heard: String = "",
+    val attempts: Int = 0,
+    val done: Int = 0
+) {
+    val current: Int? get() = ranks.getOrNull(index)
+    val finished: Boolean get() = index >= ranks.size
+}
+
+enum class ListenPhase { IDLE, LISTENING, DONE, ERROR }
+
+data class ListenState(
+    val phase: ListenPhase = ListenPhase.IDLE,
+    /** 0..1 microphone level while listening. */
+    val level: Float = 0f,
+    val partial: String = "",
+    val error: String? = null
+)

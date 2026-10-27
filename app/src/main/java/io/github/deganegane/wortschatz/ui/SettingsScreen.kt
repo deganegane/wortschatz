@@ -50,7 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import io.github.deganegane.wortschatz.AppViewModel
 import io.github.deganegane.wortschatz.BuildConfigInfo
-import io.github.deganegane.wortschatz.Direction
+import io.github.deganegane.wortschatz.Practice
 import io.github.deganegane.wortschatz.ThemeMode
 import io.github.deganegane.wortschatz.UiState
 import io.github.deganegane.wortschatz.VoiceState
@@ -91,8 +91,29 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
                 Label("Novih riječi dnevno", "Koliko novih riječi uvodiš svaki dan. 10 je dobra mjera uz par minuta ponavljanja.")
                 Choice(listOf(5, 10, 15, 20), s.newPerDay, { it.toString() }) { n -> vm.updateSettings { it.copy(newPerDay = n) } }
                 Spacer(Modifier.height(16.dp))
-                Label("Smjer kartica", "HR → DE je teže, ali bolje vježba govor: tražiš njemačku riječ kao u razgovoru.")
-                Choice(Direction.entries, s.direction, { it.label }) { d -> vm.updateSettings { it.copy(direction = d) } }
+                Label(
+                    "Način vježbe",
+                    when (s.practice) {
+                        Practice.CLASSIC -> "Samo prepoznavanje: vidiš njemačku riječ i sjetiš se značenja."
+                        Practice.SPEAKING -> "Samo govor: izgovaraš njemačku riječ iz hrvatskog ili dopunjavaš rečenicu naglas."
+                        Practice.MIXED -> "Nove riječi prvo prepoznaješ, a kad ih par puta vidiš, sve češće ih izgovaraš (preporučeno)."
+                    }
+                )
+                Choice(Practice.entries, s.practice, { it.label }) { p -> vm.updateSettings { it.copy(practice = p) } }
+                Spacer(Modifier.height(16.dp))
+                Label(
+                    "Ciljano pamćenje",
+                    "Koliko je vjerojatno da se sjetiš riječi kad dođe na red (FSRS). Više = češća ponavljanja."
+                )
+                Choice(listOf(0.85, 0.9, 0.95), s.retention, { "${(it * 100).toInt()} %" }) { r ->
+                    vm.updateSettings { it.copy(retention = r) }
+                }
+                Spacer(Modifier.height(8.dp))
+                ToggleRow(
+                    "Odgovaraj glasom",
+                    if (vm.recognitionAvailable) "Mikrofon provjerava izgovorenu riječ i član" else "Prepoznavanje govora nije dostupno na ovom mobitelu",
+                    s.speakAnswers
+                ) { v -> vm.updateSettings { it.copy(speakAnswers = v) } }
             }
 
             Group("Izgovor") {

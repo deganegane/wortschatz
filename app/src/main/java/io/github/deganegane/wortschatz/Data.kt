@@ -23,7 +23,8 @@ object WordRepo {
                 forms = o.optStringOrNull("f"),
                 hr = o.getString("hr"),
                 example = o.optString("ex", ""),
-                exampleHr = o.optString("exHr", "")
+                exampleHr = o.optString("exHr", ""),
+                cloze = o.optJSONArray("cl")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
             )
         }
         return out.sortedBy { it.rank }
@@ -47,7 +48,9 @@ class Store(ctx: Context) {
 
     fun loadSettings(): Settings = Settings(
         newPerDay = prefs.getInt("newPerDay", 10),
-        direction = enumOr(prefs.getString("direction", null), Direction.DE_HR),
+        practice = enumOr(prefs.getString("practice", null), Practice.MIXED),
+        speakAnswers = prefs.getBoolean("speakAnswers", true),
+        retention = Math.round(prefs.getFloat("retention", 0.9f) * 100) / 100.0,
         autoSpeak = prefs.getBoolean("autoSpeak", true),
         slowSpeech = prefs.getBoolean("slowSpeech", false),
         reminderOn = prefs.getBoolean("reminderOn", false),
@@ -60,7 +63,9 @@ class Store(ctx: Context) {
     fun saveSettings(s: Settings) {
         prefs.edit()
             .putInt("newPerDay", s.newPerDay)
-            .putString("direction", s.direction.name)
+            .putString("practice", s.practice.name)
+            .putBoolean("speakAnswers", s.speakAnswers)
+            .putFloat("retention", s.retention.toFloat())
             .putBoolean("autoSpeak", s.autoSpeak)
             .putBoolean("slowSpeech", s.slowSpeech)
             .putBoolean("reminderOn", s.reminderOn)
@@ -85,11 +90,13 @@ class Store(ctx: Context) {
                 out[k.toInt()] = Card(
                     status = Status.of(c.optInt("s", 0)),
                     interval = c.optDouble("i", 0.0),
-                    ease = c.optDouble("e", 2.5),
+                    stability = c.optDouble("S", 0.0),
+                    difficulty = c.optDouble("D", 0.0),
                     due = c.optLong("d", 0),
                     reps = c.optInt("n", 0),
-                    lapses = c.optInt("l", 0)
-                )
+                    lapses = c.optInt("l", 0),
+                    lastReview = c.optLong("lr", 0)
+                ).let(Srs::migrate)
             }
             out
         } catch (e: JSONException) {
@@ -105,8 +112,8 @@ class Store(ctx: Context) {
             if (c.status == Status.UNTESTED) continue
             val j = JSONObject().put("s", c.status.code)
             if (c.status == Status.LEARNING) {
-                j.put("i", c.interval).put("e", c.ease).put("d", c.due)
-                    .put("n", c.reps).put("l", c.lapses)
+                j.put("i", c.interval).put("S", c.stability).put("D", c.difficulty).put("d", c.due)
+                    .put("n", c.reps).put("l", c.lapses).put("lr", c.lastReview)
             }
             o.put(rank.toString(), j)
         }
@@ -124,7 +131,7 @@ class Store(ctx: Context) {
             while (keys.hasNext()) {
                 val k = keys.next()
                 val d = o.getJSONObject(k)
-                out[k.toLong()] = DayStat(d.optInt("r"), d.optInt("n"), d.optInt("t"))
+                out[k.toLong()] = DayStat(d.optInt("r"), d.optInt("n"), d.optInt("t"), d.optInt("s"))
             }
             out
         } catch (e: JSONException) {
@@ -140,7 +147,7 @@ class Store(ctx: Context) {
         val cutoff = today() - 400
         for ((day, s) in days) {
             if (day < cutoff) continue
-            o.put(day.toString(), JSONObject().put("r", s.reviews).put("n", s.newCards).put("t", s.tested))
+            o.put(day.toString(), JSONObject().put("r", s.reviews).put("n", s.newCards).put("t", s.tested).put("s", s.shadowed))
         }
         prefs.edit().putString("days", o.toString()).apply()
     }

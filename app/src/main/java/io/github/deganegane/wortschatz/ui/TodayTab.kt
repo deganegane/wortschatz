@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -87,6 +88,9 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
 
         Spacer(Modifier.height(16.dp))
         PlanCard(vm, state)
+
+        Spacer(Modifier.height(16.dp))
+        ShadowCard(vm)
 
         if (state.voice == VoiceState.NO_GERMAN || state.voice == VoiceState.NO_ENGINE) {
             Spacer(Modifier.height(16.dp))
@@ -212,6 +216,32 @@ private fun PlanCard(vm: AppViewModel, state: UiState) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ShadowCard(vm: AppViewModel) {
+    val cs = MaterialTheme.colorScheme
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = cs.secondaryContainer, contentColor = cs.onSecondaryContainer)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_shadow), contentDescription = null, modifier = Modifier.size(32.dp))
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Shadowing", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Slušaj i ponavljaj naglas 10 rečenica. Za izgovor i tečnost, oko 5 minuta.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            FilledTonalButton(
+                onClick = { vm.startShadowing() },
+                colors = ButtonDefaults.filledTonalButtonColors(containerColor = cs.secondary, contentColor = cs.onSecondary)
+            ) { Text("Kreni") }
         }
     }
 }
