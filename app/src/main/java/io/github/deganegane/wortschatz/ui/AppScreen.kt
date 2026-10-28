@@ -58,7 +58,7 @@ fun AppScreen(vm: AppViewModel, state: UiState) {
     }
 
     BackHandler(enabled = screen == Screen.SETTINGS) { showSettings = false }
-    BackHandler(enabled = screen == Screen.MAIN && tab != 0 && openStory == null) { tab = 0 }
+    BackHandler(enabled = screen == Screen.MAIN && tab != 0 && (tab != Tab.READING.ordinal || openStory == null)) { tab = 0 }
 
     AnimatedContent(
         targetState = screen,

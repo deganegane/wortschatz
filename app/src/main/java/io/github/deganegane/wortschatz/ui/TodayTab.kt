@@ -107,6 +107,7 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
             ) { vm.startHardSession() }
         }
 
+        if (state.hasGaps) {
         Spacer(Modifier.height(16.dp))
         ExtraCard(
             icon = R.drawable.ic_grammar,
@@ -117,6 +118,7 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
             button = cs.primary,
             onButton = cs.onPrimary
         ) { vm.startGrammar() }
+        }
 
         Spacer(Modifier.height(16.dp))
         ExtraCard(
@@ -223,7 +225,7 @@ private fun PlanCard(vm: AppViewModel, state: UiState) {
     val cs = MaterialTheme.colorScheme
     val due = state.dueToday
     val fresh = state.newLeftToday
-    val moreAvailable = state.count(Bucket.TO_LEARN) + state.count(Bucket.UNTESTED) > 0
+    val moreAvailable = state.newAvailable > 0
     Card(
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = cs.surfaceContainer)

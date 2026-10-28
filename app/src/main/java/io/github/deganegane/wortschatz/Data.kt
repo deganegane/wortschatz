@@ -41,8 +41,9 @@ object WordRepo {
         } catch (e: Exception) {
             return emptyList()
         }
-        val arr = JSONArray(text)
-        return List(arr.length()) { i ->
+        return try {
+            val arr = JSONArray(text)
+            List(arr.length()) { i ->
             val o = arr.getJSONObject(i)
             Story(
                 id = o.getString("id"),
@@ -52,6 +53,9 @@ object WordRepo {
                 hr = o.optString("hr", ""),
                 newWords = o.optJSONArray("new")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
             )
+            }
+        } catch (e: JSONException) {
+            emptyList()
         }
     }
 
@@ -62,14 +66,18 @@ object WordRepo {
         } catch (e: Exception) {
             return emptyMap()
         }
-        val o = JSONObject(text)
-        val out = HashMap<String, Int>(o.length() * 2)
-        val keys = o.keys()
-        while (keys.hasNext()) {
-            val k = keys.next()
-            out[k] = o.getInt(k)
+        return try {
+            val o = JSONObject(text)
+            val out = HashMap<String, Int>(o.length() * 2)
+            val keys = o.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                out[k] = o.getInt(k)
+            }
+            out
+        } catch (e: JSONException) {
+            emptyMap()
         }
-        return out
     }
 
     private fun JSONObject.optStringOrNull(key: String): String? =
@@ -101,7 +109,8 @@ class Store(ctx: Context) {
         themeMode = enumOr(prefs.getString("themeMode", null), ThemeMode.SYSTEM),
         dynamicColor = prefs.getBoolean("dynamicColor", false),
         level = prefs.getInt("level", 1).coerceAtLeast(1),
-        phrasesOn = prefs.getBoolean("phrasesOn", true)
+        phrasesOn = prefs.getBoolean("phrasesOn", true),
+        voiceName = prefs.getString("voiceName", null)
     )
 
     fun saveSettings(s: Settings) {
@@ -119,6 +128,7 @@ class Store(ctx: Context) {
             .putBoolean("dynamicColor", s.dynamicColor)
             .putInt("level", s.level)
             .putBoolean("phrasesOn", s.phrasesOn)
+            .putString("voiceName", s.voiceName)
             .apply()
     }
 

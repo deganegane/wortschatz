@@ -191,7 +191,9 @@ data class Settings(
     /** Active list size in thousands: 1 = top 1000 … 4 = top 4000. */
     val level: Int = 1,
     /** Mix ready-made conversational phrases into the new cards. */
-    val phrasesOn: Boolean = true
+    val phrasesOn: Boolean = true,
+    /** Name of the TTS voice to use; null = best offline German voice. */
+    val voiceName: String? = null
 )
 
 /** Activity of one calendar day. */

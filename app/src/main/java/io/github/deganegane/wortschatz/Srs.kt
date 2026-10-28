@@ -152,7 +152,7 @@ object Srs {
     ): List<QueueItem> {
         val byRank = words.associateBy { it.rank }
         val due = cards.entries
-            .filter { it.value.status == Status.LEARNING && it.value.due <= today }
+            .filter { it.value.status == Status.LEARNING && it.value.due <= today && it.key in byRank }
             .sortedWith(compareBy({ it.value.due }, { it.key }))
             .map { it.key }
 

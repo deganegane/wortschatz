@@ -36,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -155,6 +156,27 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
                         // Not available on this phone.
                     }
                 }) { Text("Postavke govora") }
+                if (state.voices.size > 1) {
+                    Spacer(Modifier.height(12.dp))
+                    Label("Glas", "Online glasovi zvuče prirodnije, ali svaka kartica čeka internet. Dodirni za probu.")
+                    state.voices.forEach { v ->
+                        val selected = v.name == s.voiceName || (s.voiceName == null && v.name == state.voices.firstOrNull { !it.network }?.name)
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    vm.updateSettings { it.copy(voiceName = v.name) }
+                                    vm.speak("Guten Tag! Wie geht es dir?")
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = selected, onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(v.label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 TextButton(onClick = { vm.speak("Guten Tag! Wie geht es dir?") }) { Text("Probaj: \"Guten Tag! Wie geht es dir?\"") }
             }

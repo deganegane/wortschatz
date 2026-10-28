@@ -354,7 +354,7 @@ private fun GradeButton(
 private fun SessionSummary(vm: AppViewModel, state: UiState) {
     val s = state.session ?: return
     val cs = MaterialTheme.colorScheme
-    val moreAvailable = state.count(Bucket.TO_LEARN) + state.count(Bucket.UNTESTED) > 0
+    val moreAvailable = state.newAvailable > 0
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,

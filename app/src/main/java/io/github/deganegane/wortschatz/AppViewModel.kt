@@ -18,6 +18,7 @@ data class UiState(
     val days: Map<Long, DayStat> = emptyMap(),
     val settings: Settings = Settings(),
     val voice: VoiceState = VoiceState.LOADING,
+    val voices: List<VoiceInfo> = emptyList(),
     val session: Session? = null,
     val shadowing: Shadowing? = null,
     val grammar: GrammarRound? = null,
@@ -51,7 +52,15 @@ data class UiState(
 
     val phrasesLearning: Int by lazy { phrases.count { cards[it.rank]?.status == Status.LEARNING } }
 
-    val hardWords: List<Int> by lazy { Srs.hardWords(cards) }
+    val hardWords: List<Int> by lazy { Srs.hardWords(cards).filter { word(it) != null } }
+
+    val hasGaps: Boolean by lazy { vocab.any { it.gap != null } }
+
+    /** Words and phrases that could still be introduced as new cards. */
+    val newAvailable: Int by lazy {
+        count(Bucket.TO_LEARN) + count(Bucket.UNTESTED) +
+            phrases.count { (cards[it.rank]?.status ?: Status.UNTESTED).let { s -> s == Status.UNTESTED || s == Status.TO_LEARN } }
+    }
 
     val storiesRead: Int get() = stories.count { it.id in readIds }
 
@@ -66,13 +75,12 @@ data class UiState(
     }
 
     val todayStat: DayStat get() = days[today] ?: DayStat()
-    val dueToday: Int get() = Srs.dueCount(cards, today)
+    /** Due cards that belong to the active list (phrases turned off or a lowered level are skipped). */
+    val dueToday: Int get() = cards.count { (r, c) -> c.status == Status.LEARNING && c.due <= today && word(r) != null }
     val newLeftToday: Int
         get() {
             val budget = (settings.newPerDay - todayStat.newCards).coerceAtLeast(0)
-            val available = count(Bucket.TO_LEARN) + count(Bucket.UNTESTED) +
-                phrases.count { (cards[it.rank]?.status ?: Status.UNTESTED) != Status.LEARNING && cards[it.rank]?.status != Status.KNOWN }
-            return minOf(budget, available)
+            return minOf(budget, newAvailable)
         }
     val streak: Int get() = Srs.streak(days, today)
 
@@ -96,7 +104,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(UiState(settings = store.loadSettings()))
     val state: StateFlow<UiState> = _state.asStateFlow()
 
-    private val speech = Speech(app) { voice -> _state.update { it.copy(voice = voice) } }
+    private val speech = Speech(app) { voice ->
+        if (voice == VoiceState.READY) speech.chooseVoice(_state.value.settings.voiceName)
+        _state.update { it.copy(voice = voice, voices = speech.voices) }
+    }
+
+    /** German voices on this phone (empty until the engine is ready). */
+    val voiceOptions: List<VoiceInfo> get() = speech.voices
 
     /** Inflected form → rank, loaded the first time a story is opened. */
     private var forms: Map<String, Int>? = null
@@ -293,11 +307,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Ten sentences, mostly from words you already know or are learning. */
     fun startShadowing(count: Int = 10) {
         val s = _state.value
-        val familiar = s.words.filter {
+        val familiar = s.vocab.filter {
             val st = s.cards[it.rank]?.status
             st == Status.KNOWN || st == Status.LEARNING
         }.shuffled().take(count).map { it.rank }
-        val fill = s.words.map { it.rank }.filter { it !in familiar }.take(count - familiar.size)
+        val fill = s.vocab.map { it.rank }.filter { it !in familiar }.take(count - familiar.size)
         _state.update { it.copy(shadowing = Shadowing((familiar + fill).shuffled()), listen = ListenState()) }
     }
 
@@ -391,6 +405,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         store.saveSettings(next)
         Reminders.reschedule(getApplication(), next)
+        speech.chooseVoice(next.voiceName)
     }
 
     fun resetProgress() {
@@ -433,9 +448,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The list entry a word in a story belongs to, by inflected form; null if it isn't on the list. */
     fun lookup(token: String): Word? {
-        val key = token.lowercase().trim { !it.isLetterOrDigit() }
-        if (key.isEmpty()) return null
-        val rank = forms?.get(key) ?: forms?.get(key.replace("ß", "ss")) ?: return null
+        val raw = token.lowercase().trim { !it.isLetterOrDigit() }
+        if (raw.isEmpty()) return null
+        val f = forms ?: return null
+        // "geht's" → "geht"
+        val key = raw.substringBefore('\'').substringBefore('’')
+        val rank = f[raw] ?: f[key] ?: f[key.replace("ß", "ss")] ?: return null
         return allWords.firstOrNull { it.rank == rank }
     }
 
