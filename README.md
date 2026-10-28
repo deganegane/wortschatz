@@ -14,8 +14,13 @@ množinom ili glagolskim oblicima, hrvatskim prijevodom i rečenicom kakvu bi Ni
    - **reci na njemačkom** – hrvatska riječ → izgovoriš njemačku (s članom), mikrofon provjeri,
    - **dopuni rečenicu** – primjer s prazninom → izgovoriš riječ koja fali.
    U mješovitom načinu nove riječi prvo prepoznaješ, a zatim ih sve češće izgovaraš.
+   Svaka treća nova kartica je **fraza za razgovor** (287 gotovih rečenica po situacijama).
 3. **Shadowing** – slušaš rečenicu i odmah je ponoviš naglas; vidiš koje su riječi prošle.
-4. **Rječnik** – sve riječi s pretragom (njemački ili hrvatski) i filtrima po statusu.
+4. **Gramatika** – 10 rečenica s prazninom na članu, zamjenici ili nastavku (4 opcije, kratko
+   objašnjenje). **Teške riječi** – dodatna sesija s riječima koje najčešće padaju.
+5. **Čitanje** – 60 mini-priča (15 po razini) složenih od riječi s liste; dodir na riječ daje
+   prijevod, cijela priča može se poslušati.
+6. **Rječnik** – sve riječi i fraze s pretragom (njemački ili hrvatski) i filtrima po statusu.
 
 Članovi su obojani (der plavo, die crveno, das zeleno), a izgovor ide preko njemačkog glasa
 na mobitelu (Google govorne usluge → Deutsch); prepoznavanje govora koristi Googleov
@@ -32,7 +37,8 @@ stare i napredak ostaje.
 
 | Datoteka | Sadržaj |
 |---|---|
-| `assets/words.json` | lista riječi (r, de, a, pl, pos, f, hr, ex, exHr, cl = praznine) |
+| `assets/words.json` | riječi i fraze (r, de, a, pl, pos, f, hr, ex, exHr, cl = praznine, cat, g = gramatička praznina) |
+| `assets/stories.json`, `assets/forms.json` | mini-priče; oblik riječi → rang (za dodir u priči) |
 | `Model.kt` | riječi, kartice, statusi, postavke |
 | `Data.kt` | učitavanje liste, spremanje napretka (SharedPreferences, JSON) |
 | `Srs.kt` | FSRS raspored, dnevni red i vrste kartica, niz dana |
@@ -40,4 +46,4 @@ stare i napredak ostaje.
 | `AppViewModel.kt` | stanje aplikacije i sve radnje |
 | `Speech.kt` | njemački izgovor (TTS) |
 | `Reminders.kt` | dnevni podsjetnik |
-| `ui/` | ekrani: Danas, Test, ponavljanje, shadowing, Rječnik, Postavke |
+| `ui/` | ekrani: Danas, Test, ponavljanje, shadowing, gramatika, čitanje, Rječnik, Postavke |
