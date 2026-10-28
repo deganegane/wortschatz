@@ -11,6 +11,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Secrets can't be read in a step's `if`, so expose it at job level.
+      PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
 
     steps:
       - name: Checkout
@@ -51,3 +54,16 @@ jobs:
           files: |
             Wortschatz.apk
             Wortschatz.aab
+
+      # Sends every build to the Play Console internal test track once the repository has the
+      # PLAY_SERVICE_ACCOUNT_JSON secret (Settings → Secrets and variables → Actions).
+      # The very first AAB of a new app has to be uploaded by hand in Play Console.
+      - name: Upload to Google Play (internal testing)
+        if: ${{ env.PLAY_JSON != '' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: io.github.deganegane.wortschatz
+          releaseFiles: Wortschatz.aab
+          tracks: internal
+          status: completed
