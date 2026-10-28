@@ -104,7 +104,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(UiState(settings = store.loadSettings()))
     val state: StateFlow<UiState> = _state.asStateFlow()
 
-    private val speech = Speech(app) { voice ->
+    private val speech: Speech = Speech(app) { voice ->
         if (voice == VoiceState.READY) speech.chooseVoice(_state.value.settings.voiceName)
         _state.update { it.copy(voice = voice, voices = speech.voices) }
     }
