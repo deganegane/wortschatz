@@ -8,14 +8,15 @@ plugins {
 
 android {
     namespace = "io.github.deganegane.wortschatz"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "io.github.deganegane.wortschatz"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 6
-        versionName = "2.1.1"
+        targetSdk = 36
+        // Every CI build gets a higher code, so each one can go to Play Console as-is.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 7
+        versionName = "2.2"
     }
 
     // One permanent key for every build, so each new APK installs over the previous one and

@@ -25,23 +25,29 @@ jobs:
       - name: Set up Gradle (with cache)
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK
+      - name: Build APK (for the phone) and AAB (for Play Console)
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug bundleRelease --no-daemon --stacktrace
 
-      - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Wortschatz.apk
+      - name: Rename outputs
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk Wortschatz.apk
+          cp app/build/outputs/bundle/release/app-release.aab Wortschatz.aab
 
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Wortschatz-apk
-          path: Wortschatz.apk
+          name: Wortschatz
+          path: |
+            Wortschatz.apk
+            Wortschatz.aab
 
       - name: Publish release with APK (easy download on phone)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: Wortschatz – build ${{ github.run_number }}
-          files: Wortschatz.apk
+          files: |
+            Wortschatz.apk
+            Wortschatz.aab
