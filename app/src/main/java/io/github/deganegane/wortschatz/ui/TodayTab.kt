@@ -94,21 +94,53 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
             UnlockCard(vm, state)
         }
 
+        if (state.hardWords.size >= 5) {
+            Spacer(Modifier.height(16.dp))
+            ExtraCard(
+                icon = R.drawable.ic_hard,
+                title = "Teške riječi (${state.hardWords.size})",
+                text = "Riječi koje ti najčešće padaju, u govornim karticama. Kratko i ciljano.",
+                container = cs.tertiaryContainer,
+                content = cs.onTertiaryContainer,
+                button = cs.tertiary,
+                onButton = cs.onTertiary
+            ) { vm.startHardSession() }
+        }
+
         Spacer(Modifier.height(16.dp))
-        ShadowCard(vm)
+        ExtraCard(
+            icon = R.drawable.ic_grammar,
+            title = "Gramatika",
+            text = "10 rečenica s prazninom na članu, zamjenici ili nastavku. Padeži bez tablica.",
+            container = cs.surfaceContainer,
+            content = cs.onSurface,
+            button = cs.primary,
+            onButton = cs.onPrimary
+        ) { vm.startGrammar() }
+
+        Spacer(Modifier.height(16.dp))
+        ExtraCard(
+            icon = R.drawable.ic_shadow,
+            title = "Shadowing",
+            text = "Slušaj i ponavljaj naglas 10 rečenica. Za izgovor i tečnost, oko 5 minuta.",
+            container = cs.secondaryContainer,
+            content = cs.onSecondaryContainer,
+            button = cs.secondary,
+            onButton = cs.onSecondary
+        ) { vm.startShadowing() }
 
         if (state.voice == VoiceState.NO_GERMAN || state.voice == VoiceState.NO_ENGINE) {
             Spacer(Modifier.height(16.dp))
             VoiceWarning()
         }
 
-        if (state.tested < state.words.size) {
+        if (state.tested < state.vocab.size) {
             Spacer(Modifier.height(16.dp))
             TestCard(state, onOpenTest)
         }
 
         Spacer(Modifier.height(24.dp))
-        SectionTitle("Tvojih ${state.words.size} riječi")
+        SectionTitle("Tvojih ${state.vocab.size} riječi")
         BreakdownBar(state)
         Spacer(Modifier.height(12.dp))
         Legend(
@@ -131,7 +163,7 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
 @Composable
 private fun HeroCard(state: UiState) {
     val cs = MaterialTheme.colorScheme
-    val total = state.words.size.coerceAtLeast(1)
+    val total = state.vocab.size.coerceAtLeast(1)
     val target = state.familiar.toFloat() / total
     val progress by animateFloatAsState(target, tween(900), label = "ring")
     Card(
@@ -153,7 +185,7 @@ private fun HeroCard(state: UiState) {
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(state.familiar.toString(), style = MaterialTheme.typography.headlineLarge)
-                    Text("od ${state.words.size}", style = MaterialTheme.typography.labelMedium)
+                    Text("od ${state.vocab.size}", style = MaterialTheme.typography.labelMedium)
                 }
             }
             Spacer(Modifier.width(20.dp))
@@ -237,8 +269,8 @@ private fun UnlockCard(vm: AppViewModel, state: UiState) {
             Text("Razina svladana!", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(
-                "Znaš ili si svladao ${state.solid} od ${state.words.size} riječi. Otključaj riječi " +
-                    "${state.words.size + 1}–${next * 1000}: idu u test i u dnevno učenje redom od najčešćih.",
+                "Znaš ili si svladao ${state.solid} od ${state.vocab.size} riječi. Otključaj riječi " +
+                    "${state.vocab.size + 1}–${next * 1000}: idu u test i u dnevno učenje redom od najčešćih.",
                 style = MaterialTheme.typography.bodyMedium
             )
             Spacer(Modifier.height(12.dp))
@@ -248,26 +280,31 @@ private fun UnlockCard(vm: AppViewModel, state: UiState) {
 }
 
 @Composable
-private fun ShadowCard(vm: AppViewModel) {
-    val cs = MaterialTheme.colorScheme
+private fun ExtraCard(
+    icon: Int,
+    title: String,
+    text: String,
+    container: androidx.compose.ui.graphics.Color,
+    content: androidx.compose.ui.graphics.Color,
+    button: androidx.compose.ui.graphics.Color,
+    onButton: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
     Card(
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = cs.secondaryContainer, contentColor = cs.onSecondaryContainer)
+        colors = CardDefaults.cardColors(containerColor = container, contentColor = content)
     ) {
         Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.ic_shadow), contentDescription = null, modifier = Modifier.size(32.dp))
+            Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(32.dp))
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
-                Text("Shadowing", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Slušaj i ponavljaj naglas 10 rečenica. Za izgovor i tečnost, oko 5 minuta.",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(text, style = MaterialTheme.typography.bodySmall)
             }
             Spacer(Modifier.width(12.dp))
             FilledTonalButton(
-                onClick = { vm.startShadowing() },
-                colors = ButtonDefaults.filledTonalButtonColors(containerColor = cs.secondary, contentColor = cs.onSecondary)
+                onClick = onClick,
+                colors = ButtonDefaults.filledTonalButtonColors(containerColor = button, contentColor = onButton)
             ) { Text("Kreni") }
         }
     }
@@ -284,7 +321,7 @@ private fun PlanStat(label: String, value: Int, modifier: Modifier = Modifier) {
 @Composable
 private fun TestCard(state: UiState, onOpenTest: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    val total = state.words.size
+    val total = state.vocab.size
     Card(
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = cs.surfaceContainer)
@@ -346,7 +383,7 @@ private fun VoiceWarning() {
 private fun BreakdownBar(state: UiState) {
     val order = listOf(Bucket.KNOWN, Bucket.MASTERED, Bucket.LEARNING, Bucket.TO_LEARN, Bucket.UNTESTED)
     val colors = order.map { bucketColor(it) }
-    val total = state.words.size.coerceAtLeast(1).toFloat()
+    val total = state.vocab.size.coerceAtLeast(1).toFloat()
     val values = order.map { state.count(it) / total }
     Canvas(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(50))) {
         var x = 0f
@@ -365,7 +402,10 @@ private fun BreakdownBar(state: UiState) {
 private fun ActivityChart(state: UiState) {
     val cs = MaterialTheme.colorScheme
     val days = (13 downTo 0).map { state.today - it }
-    val values = days.map { (state.days[it]?.reviews ?: 0) + (state.days[it]?.tested ?: 0) / 5 }
+    val values = days.map { d ->
+        val st = state.days[d]
+        (st?.reviews ?: 0) + (st?.tested ?: 0) / 5 + (st?.shadowed ?: 0) + (st?.grammar ?: 0) + (st?.read ?: 0) * 5
+    }
     val max = (values.maxOrNull() ?: 0).coerceAtLeast(10).toFloat()
     val bar = cs.primary
     val empty = cs.surfaceContainerHighest

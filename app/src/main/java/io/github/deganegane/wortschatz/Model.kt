@@ -16,8 +16,15 @@ data class Word(
     val example: String,
     val exampleHr: String,
     /** Parts of [example] that realise the headword (blanked out in cloze cards). */
-    val cloze: List<String> = emptyList()
+    val cloze: List<String> = emptyList(),
+    /** Situation of a conversational phrase ("u restoranu"), null for ordinary words. */
+    val cat: String? = null,
+    /** A grammar gap in [example] (article, pronoun or adjective ending), if one was marked. */
+    val gap: Gap? = null
 ) {
+    /** Ready-made conversational phrases live above rank [PHRASE_RANK]. */
+    val isPhrase: Boolean get() = rank > PHRASE_RANK
+
     /** Headword with its article, e.g. "das Haus". */
     val full: String get() = if (article != null) "$article $de" else de
 
@@ -79,6 +86,36 @@ const val LEVEL_SIZE = 1000
 const val UNLOCK_SHARE = 0.8
 
 const val BLANK = "_____"
+const val PHRASE_RANK = 10000
+
+/** A fill-in-the-form exercise on a sentence: the blanked token, four options, hint and explanation. */
+data class Gap(val blank: String, val options: List<String>, val hint: String, val explanation: String)
+
+/** A graded mini-story (assets/stories.json). */
+data class Story(
+    val id: String,
+    val level: Int,
+    val title: String,
+    val de: String,
+    val hr: String,
+    /** Words beyond the level's list that the story introduces. */
+    val newWords: List<String>
+) {
+    val wordCount: Int get() = de.split(Regex("\\s+")).count { it.any(Char::isLetter) }
+}
+
+/** One grammar-gap round: ten sentences answered by tapping an option. */
+data class GrammarRound(
+    val ranks: List<Int>,
+    val index: Int = 0,
+    /** Option chosen on the current sentence, null until answered. */
+    val chosen: String? = null,
+    val correct: Int = 0,
+    val wrong: Int = 0
+) {
+    val current: Int? get() = ranks.getOrNull(index)
+    val finished: Boolean get() = index >= ranks.size
+}
 
 data class Card(
     val status: Status,
@@ -152,12 +189,21 @@ data class Settings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColor: Boolean = false,
     /** Active list size in thousands: 1 = top 1000 … 4 = top 4000. */
-    val level: Int = 1
+    val level: Int = 1,
+    /** Mix ready-made conversational phrases into the new cards. */
+    val phrasesOn: Boolean = true
 )
 
 /** Activity of one calendar day. */
-data class DayStat(val reviews: Int = 0, val newCards: Int = 0, val tested: Int = 0, val shadowed: Int = 0) {
-    val active: Boolean get() = reviews > 0 || tested > 0 || shadowed > 0
+data class DayStat(
+    val reviews: Int = 0,
+    val newCards: Int = 0,
+    val tested: Int = 0,
+    val shadowed: Int = 0,
+    val read: Int = 0,
+    val grammar: Int = 0
+) {
+    val active: Boolean get() = reviews > 0 || tested > 0 || shadowed > 0 || read > 0 || grammar > 0
 }
 
 /** One card waiting in a review session. */

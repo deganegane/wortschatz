@@ -162,6 +162,7 @@ object SpeechCheck {
     /** Say the German word for the Croatian prompt. */
     fun checkWord(word: Word, results: List<String>): SpokenCheck {
         if (results.isEmpty()) return SpokenCheck(Verdict.WRONG, "")
+        if (word.isPhrase) return checkPhrase(word, results)
         val target = tokens(word.de.replace(Regex("^sich "), ""))
         val alternatives = when {
             word.rank == 1 -> listOf(listOf("der"), listOf("die"), listOf("das"))
@@ -188,6 +189,25 @@ object SpeechCheck {
             }
         }
         return almost ?: SpokenCheck(Verdict.WRONG, results.first())
+    }
+
+    /** A whole phrase: most of its words, in order, is good enough for the recogniser's slips. */
+    private fun checkPhrase(word: Word, results: List<String>): SpokenCheck {
+        var best = 0.0
+        var bestHeard = results.first()
+        for (heard in results) {
+            val m = matchSentence(word.de, listOf(heard))
+            val share = if (m.isEmpty()) 0.0 else m.count { it }.toDouble() / m.size
+            if (share > best) {
+                best = share
+                bestHeard = heard
+            }
+        }
+        return when {
+            best >= 0.75 -> SpokenCheck(Verdict.CORRECT, bestHeard)
+            best >= 0.5 -> SpokenCheck(Verdict.ALMOST, bestHeard)
+            else -> SpokenCheck(Verdict.WRONG, results.first())
+        }
     }
 
     /** Say the missing word(s) of the sentence — or the whole sentence. */

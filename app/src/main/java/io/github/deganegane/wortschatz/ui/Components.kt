@@ -63,6 +63,7 @@ fun Headword(
 fun GrammarLine(word: Word, modifier: Modifier = Modifier, center: Boolean = false) {
     val parts = buildList {
         POS_LABELS[word.pos]?.let { add(it) }
+        word.cat?.let { add(it) }
         if (word.article != null && word.plural != null) {
             add(if (word.plural == "—") "bez množine" else "mn. die ${word.plural}")
         }

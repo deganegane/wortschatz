@@ -20,6 +20,9 @@ data class UiState(
     val voice: VoiceState = VoiceState.LOADING,
     val session: Session? = null,
     val shadowing: Shadowing? = null,
+    val grammar: GrammarRound? = null,
+    val stories: List<Story> = emptyList(),
+    val readIds: Set<String> = emptySet(),
     val listen: ListenState = ListenState(),
     /** Undo stack of the placement test: rank and the card it had before. */
     val testUndo: List<Triple<Int, Card?, Card>> = emptyList(),
@@ -30,25 +33,36 @@ data class UiState(
     private val byRank: Map<Int, Word> by lazy { words.associateBy { it.rank } }
     fun word(rank: Int): Word? = byRank[rank]
 
+    /** The active frequency list without the conversational phrases. */
+    val vocab: List<Word> by lazy { words.filter { !it.isPhrase } }
+    val phrases: List<Word> by lazy { words.filter { it.isPhrase } }
+
     val counts: Map<Bucket, Int> by lazy {
         val m = HashMap<Bucket, Int>()
-        for (w in words) {
+        for (w in vocab) {
             val b = cards[w.rank].bucket()
             m[b] = (m[b] ?: 0) + 1
         }
         m
     }
 
-    fun count(b: Bucket): Int = if (b == Bucket.ALL) words.size else counts[b] ?: 0
+    /** Bucket counts over the frequency list (phrases are counted separately). */
+    fun count(b: Bucket): Int = if (b == Bucket.ALL) vocab.size else counts[b] ?: 0
+
+    val phrasesLearning: Int by lazy { phrases.count { cards[it.rank]?.status == Status.LEARNING } }
+
+    val hardWords: List<Int> by lazy { Srs.hardWords(cards) }
+
+    val storiesRead: Int get() = stories.count { it.id in readIds }
 
     /** Known outright, mastered, or currently being learned. */
     val familiar: Int get() = count(Bucket.KNOWN) + count(Bucket.MASTERED) + count(Bucket.LEARNING)
 
-    val tested: Int get() = words.size - count(Bucket.UNTESTED)
+    val tested: Int get() = vocab.size - count(Bucket.UNTESTED)
 
     /** Next word in the placement test, or null when everything has been tested. */
     val nextTestRank: Int? by lazy {
-        words.firstOrNull { (cards[it.rank]?.status ?: Status.UNTESTED) == Status.UNTESTED }?.rank
+        vocab.firstOrNull { (cards[it.rank]?.status ?: Status.UNTESTED) == Status.UNTESTED }?.rank
     }
 
     val todayStat: DayStat get() = days[today] ?: DayStat()
@@ -56,7 +70,8 @@ data class UiState(
     val newLeftToday: Int
         get() {
             val budget = (settings.newPerDay - todayStat.newCards).coerceAtLeast(0)
-            val available = count(Bucket.TO_LEARN) + count(Bucket.UNTESTED)
+            val available = count(Bucket.TO_LEARN) + count(Bucket.UNTESTED) +
+                phrases.count { (cards[it.rank]?.status ?: Status.UNTESTED) != Status.LEARNING && cards[it.rank]?.status != Status.KNOWN }
             return minOf(budget, available)
         }
     val streak: Int get() = Srs.streak(days, today)
@@ -68,7 +83,7 @@ data class UiState(
     val solid: Int get() = count(Bucket.KNOWN) + count(Bucket.MASTERED)
 
     /** Needed for the next level. */
-    val unlockTarget: Int get() = (words.size * UNLOCK_SHARE).toInt()
+    val unlockTarget: Int get() = (vocab.size * UNLOCK_SHARE).toInt()
 
     val canUnlock: Boolean get() = settings.level < maxLevel && solid >= unlockTarget
 }
@@ -82,6 +97,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private val speech = Speech(app) { voice -> _state.update { it.copy(voice = voice) } }
+
+    /** Inflected form → rank, loaded the first time a story is opened. */
+    private var forms: Map<String, Int>? = null
+    private var formsLoading = false
 
     private enum class ListenFor { REVIEW, SHADOW }
     private var listenFor = ListenFor.REVIEW
@@ -102,14 +121,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val loaded = withContext(Dispatchers.IO) {
                 Triple(WordRepo.load(getApplication()), store.loadCards(), store.loadDays())
             }
+            val stories = withContext(Dispatchers.IO) { WordRepo.loadStories(getApplication()) }
+            val read = store.loadRead()
             _state.update {
                 allWords = loaded.first
                 it.copy(
                     loading = false,
-                    words = activeWords(it.settings.level),
-                    allCount = allWords.size,
+                    words = activeWords(it.settings),
+                    allCount = allWords.count { w -> !w.isPhrase },
                     cards = loaded.second,
                     days = loaded.third,
+                    stories = stories,
+                    readIds = read,
                     today = today()
                 )
             }
@@ -351,7 +374,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Settings ---------------------------------------------------------
 
-    private fun activeWords(level: Int): List<Word> = allWords.filter { it.rank <= level * LEVEL_SIZE }
+    private fun activeWords(s: Settings): List<Word> =
+        allWords.filter { it.rank <= s.level * LEVEL_SIZE || (s.phrasesOn && it.isPhrase) }
 
     /** Switch the active list to the top [level] × 1000 words. Progress on every word is kept. */
     fun setLevel(level: Int) {
@@ -362,10 +386,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun updateSettings(transform: (Settings) -> Settings) {
         val next = transform(_state.value.settings)
         _state.update {
-            it.copy(
-                settings = next,
-                words = if (next.level != it.settings.level) activeWords(next.level) else it.words
-            )
+            val changed = next.level != it.settings.level || next.phrasesOn != it.settings.phrasesOn
+            it.copy(settings = next, words = if (changed) activeWords(next) else it.words)
         }
         store.saveSettings(next)
         Reminders.reschedule(getApplication(), next)
@@ -373,7 +395,100 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun resetProgress() {
         store.resetProgress()
-        _state.update { it.copy(cards = emptyMap(), days = emptyMap(), testUndo = emptyList(), session = null) }
+        _state.update {
+            it.copy(cards = emptyMap(), days = emptyMap(), readIds = emptySet(), testUndo = emptyList(), session = null)
+        }
+    }
+
+    // ---- Hard words -------------------------------------------------------
+
+    /** A short extra session with the words that keep failing, in speaking modes. */
+    fun startHardSession() {
+        refreshDay()
+        val s = _state.value
+        val random = kotlin.random.Random.Default
+        val queue = s.hardWords.mapNotNull { rank ->
+            val w = s.word(rank) ?: return@mapNotNull null
+            val mode = when (s.settings.practice) {
+                Practice.CLASSIC -> Mode.RECOGNIZE
+                else -> if (w.clozeText != null && random.nextBoolean()) Mode.CLOZE else Mode.RECALL
+            }
+            QueueItem(rank, mode, isNew = false)
+        }
+        if (queue.isEmpty()) return
+        _state.update { it.copy(session = Session(queue)) }
+    }
+
+    // ---- Stories ----------------------------------------------------------
+
+    /** Starts loading the forms index in the background (idempotent). */
+    fun ensureForms() {
+        if (forms != null || formsLoading) return
+        formsLoading = true
+        viewModelScope.launch {
+            forms = withContext(Dispatchers.IO) { WordRepo.loadForms(getApplication()) }
+            formsLoading = false
+        }
+    }
+
+    /** The list entry a word in a story belongs to, by inflected form; null if it isn't on the list. */
+    fun lookup(token: String): Word? {
+        val key = token.lowercase().trim { !it.isLetterOrDigit() }
+        if (key.isEmpty()) return null
+        val rank = forms?.get(key) ?: forms?.get(key.replace("ß", "ss")) ?: return null
+        return allWords.firstOrNull { it.rank == rank }
+    }
+
+    fun markRead(storyId: String) {
+        val s = _state.value
+        if (storyId in s.readIds) return
+        val read = s.readIds + storyId
+        val days = s.days + (s.today to s.todayStat.let { it.copy(read = it.read + 1) })
+        _state.update { it.copy(readIds = read, days = days) }
+        store.saveRead(read)
+        persist(days = days)
+    }
+
+    // ---- Grammar round ----------------------------------------------------
+
+    /** Ten sentences with a marked gap, preferring words you already know or are learning. */
+    fun startGrammar(count: Int = 10) {
+        refreshDay()
+        val s = _state.value
+        val withGap = s.vocab.filter { it.gap != null }
+        val familiar = withGap.filter { s.cards[it.rank]?.status.let { st -> st == Status.KNOWN || st == Status.LEARNING } }
+        val pool = if (familiar.size >= count) familiar else familiar + withGap.filter { it !in familiar }
+        val ranks = pool.shuffled().take(count).map { it.rank }
+        if (ranks.isEmpty()) return
+        _state.update { it.copy(grammar = GrammarRound(ranks)) }
+    }
+
+    fun grammarChoose(option: String) {
+        val s = _state.value
+        val g = s.grammar ?: return
+        if (g.chosen != null) return
+        val word = g.current?.let { s.word(it) } ?: return
+        val ok = option == word.gap?.blank
+        _state.update {
+            it.copy(grammar = g.copy(chosen = option, correct = g.correct + if (ok) 1 else 0, wrong = g.wrong + if (ok) 0 else 1))
+        }
+        if (ok && s.settings.autoSpeak) speak(word.example)
+    }
+
+    fun grammarNext() {
+        val s = _state.value
+        val g = s.grammar ?: return
+        val next = g.copy(index = g.index + 1, chosen = null)
+        val days = if (next.finished) {
+            s.days + (s.today to s.todayStat.let { it.copy(grammar = it.grammar + g.ranks.size) })
+        } else s.days
+        _state.update { it.copy(grammar = next, days = days) }
+        if (next.finished) persist(days = days)
+    }
+
+    fun closeGrammar() {
+        speech.stop()
+        _state.update { it.copy(grammar = null) }
     }
 
     /** Serialising ~1000 small cards takes a few ms; SharedPreferences.apply() writes in order, off the main thread. */

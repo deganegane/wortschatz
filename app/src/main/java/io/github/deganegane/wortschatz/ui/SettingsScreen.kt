@@ -119,6 +119,11 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.height(8.dp))
                 ToggleRow(
+                    "Fraze za razgovor",
+                    "Svaka treća nova kartica je gotova rečenica (\"Das kommt darauf an.\")",
+                    s.phrasesOn
+                ) { v -> vm.updateSettings { it.copy(phrasesOn = v) } }
+                ToggleRow(
                     "Odgovaraj glasom",
                     if (vm.recognitionAvailable) "Mikrofon provjerava izgovorenu riječ i član" else "Prepoznavanje govora nije dostupno na ovom mobitelu",
                     s.speakAnswers

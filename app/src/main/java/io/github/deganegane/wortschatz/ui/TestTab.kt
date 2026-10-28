@@ -58,7 +58,7 @@ import kotlin.math.abs
 @Composable
 fun TestTab(vm: AppViewModel, state: UiState, onStartLearning: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    val total = state.words.size
+    val total = state.vocab.size
     val rank = state.nextTestRank
 
     Column(

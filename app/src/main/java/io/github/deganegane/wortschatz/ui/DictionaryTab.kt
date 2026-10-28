@@ -61,18 +61,20 @@ fun DictionaryTab(vm: AppViewModel, state: UiState) {
     val cs = MaterialTheme.colorScheme
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(Bucket.ALL) }
+    var phrasesOnly by rememberSaveable { mutableStateOf(false) }
     var openRank by rememberSaveable { mutableStateOf<Int?>(null) }
 
     val needle = remember(query) { fold(query.trim()) }
     val folded = remember(state.words) { state.words.associate { it.rank to fold(it.searchKey) } }
-    val list = remember(state.words, state.cards, needle, filter) {
+    val list = remember(state.words, state.cards, needle, filter, phrasesOnly) {
         state.words.filter { w ->
+            (if (phrasesOnly) w.isPhrase else !w.isPhrase) &&
             (filter == Bucket.ALL || state.cards[w.rank].bucket() == filter) &&
                 (needle.isEmpty() || folded[w.rank]?.contains(needle) == true)
         }
     }
     val listState = rememberLazyListState()
-    LaunchedEffect(needle, filter) { listState.scrollToItem(0) }
+    LaunchedEffect(needle, filter, phrasesOnly) { listState.scrollToItem(0) }
 
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 20.dp)) {
@@ -97,11 +99,20 @@ fun DictionaryTab(vm: AppViewModel, state: UiState) {
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (state.phrases.isNotEmpty()) {
+                item {
+                    FilterChip(
+                        selected = phrasesOnly,
+                        onClick = { phrasesOnly = !phrasesOnly },
+                        label = { Text("Fraze ${state.phrases.size}") }
+                    )
+                }
+            }
             items(Bucket.entries) { b ->
                 FilterChip(
                     selected = filter == b,
                     onClick = { filter = b },
-                    label = { Text("${b.label} ${state.count(b)}") },
+                    label = { Text(if (phrasesOnly) b.label else "${b.label} ${state.count(b)}") },
                     leadingIcon = if (b != Bucket.ALL) {
                         { StatusDot(b) }
                     } else null

@@ -198,13 +198,39 @@ object Srs {
         }
     }
 
-    /** Words that could be introduced next, in rank order. */
+    /**
+     * Words that could be introduced next: first the ones marked "ne znam", then untested ones,
+     * in rank order — with a conversational phrase mixed in as every third new card.
+     */
     fun newCandidates(words: List<Word>, cards: Map<Int, Card>): List<Int> {
-        val toLearn = words.filter { cards[it.rank]?.status == Status.TO_LEARN }.map { it.rank }
-        val untested = words.filter { (cards[it.rank]?.status ?: Status.UNTESTED) == Status.UNTESTED }
-            .map { it.rank }
-        return toLearn + untested
+        fun pending(list: List<Word>): List<Int> {
+            val toLearn = list.filter { cards[it.rank]?.status == Status.TO_LEARN }.map { it.rank }
+            val untested = list.filter { (cards[it.rank]?.status ?: Status.UNTESTED) == Status.UNTESTED }.map { it.rank }
+            return toLearn + untested
+        }
+        val vocab = pending(words.filter { !it.isPhrase })
+        val phrases = pending(words.filter { it.isPhrase })
+        if (phrases.isEmpty()) return vocab
+        if (vocab.isEmpty()) return phrases
+        val out = ArrayList<Int>(vocab.size + phrases.size)
+        val v = vocab.iterator()
+        val p = phrases.iterator()
+        var i = 0
+        while (v.hasNext() || p.hasNext()) {
+            val takePhrase = p.hasNext() && (!v.hasNext() || i % 3 == 2)
+            out += if (takePhrase) p.next() else v.next()
+            i++
+        }
+        return out
     }
+
+    /** Learning words that keep failing: by lapses, then FSRS difficulty. */
+    fun hardWords(cards: Map<Int, Card>, limit: Int = 20): List<Int> =
+        cards.entries
+            .filter { it.value.status == Status.LEARNING && (it.value.lapses >= 1 || it.value.difficulty >= 7.5) }
+            .sortedWith(compareByDescending<Map.Entry<Int, Card>> { it.value.lapses }.thenByDescending { it.value.difficulty })
+            .take(limit)
+            .map { it.key }
 
     fun dueCount(cards: Map<Int, Card>, today: Long): Int =
         cards.values.count { it.status == Status.LEARNING && it.due <= today }

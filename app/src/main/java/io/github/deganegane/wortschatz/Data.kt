@@ -24,10 +24,52 @@ object WordRepo {
                 hr = o.getString("hr"),
                 example = o.optString("ex", ""),
                 exampleHr = o.optString("exHr", ""),
-                cloze = o.optJSONArray("cl")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
+                cloze = o.optJSONArray("cl")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList(),
+                cat = o.optStringOrNull("cat"),
+                gap = o.optJSONObject("g")?.let { g ->
+                    val opts = g.optJSONArray("o")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
+                    if (opts.size < 2) null else Gap(g.getString("b"), opts, g.optString("h", ""), g.optString("e", ""))
+                }
             )
         }
         return out.sortedBy { it.rank }
+    }
+
+    fun loadStories(ctx: Context): List<Story> {
+        val text = try {
+            ctx.assets.open("stories.json").bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } catch (e: Exception) {
+            return emptyList()
+        }
+        val arr = JSONArray(text)
+        return List(arr.length()) { i ->
+            val o = arr.getJSONObject(i)
+            Story(
+                id = o.getString("id"),
+                level = o.optInt("level", 1),
+                title = o.getString("title"),
+                de = o.getString("de"),
+                hr = o.optString("hr", ""),
+                newWords = o.optJSONArray("new")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
+            )
+        }
+    }
+
+    /** Lower-case inflected form → rank, for tapping words in stories (assets/forms.json). */
+    fun loadForms(ctx: Context): Map<String, Int> {
+        val text = try {
+            ctx.assets.open("forms.json").bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } catch (e: Exception) {
+            return emptyMap()
+        }
+        val o = JSONObject(text)
+        val out = HashMap<String, Int>(o.length() * 2)
+        val keys = o.keys()
+        while (keys.hasNext()) {
+            val k = keys.next()
+            out[k] = o.getInt(k)
+        }
+        return out
     }
 
     private fun JSONObject.optStringOrNull(key: String): String? =
@@ -58,7 +100,8 @@ class Store(ctx: Context) {
         reminderMinute = prefs.getInt("reminderMinute", 0),
         themeMode = enumOr(prefs.getString("themeMode", null), ThemeMode.SYSTEM),
         dynamicColor = prefs.getBoolean("dynamicColor", false),
-        level = prefs.getInt("level", 1).coerceAtLeast(1)
+        level = prefs.getInt("level", 1).coerceAtLeast(1),
+        phrasesOn = prefs.getBoolean("phrasesOn", true)
     )
 
     fun saveSettings(s: Settings) {
@@ -75,6 +118,7 @@ class Store(ctx: Context) {
             .putString("themeMode", s.themeMode.name)
             .putBoolean("dynamicColor", s.dynamicColor)
             .putInt("level", s.level)
+            .putBoolean("phrasesOn", s.phrasesOn)
             .apply()
     }
 
@@ -133,7 +177,7 @@ class Store(ctx: Context) {
             while (keys.hasNext()) {
                 val k = keys.next()
                 val d = o.getJSONObject(k)
-                out[k.toLong()] = DayStat(d.optInt("r"), d.optInt("n"), d.optInt("t"), d.optInt("s"))
+                out[k.toLong()] = DayStat(d.optInt("r"), d.optInt("n"), d.optInt("t"), d.optInt("s"), d.optInt("rd"), d.optInt("g"))
             }
             out
         } catch (e: JSONException) {
@@ -149,13 +193,21 @@ class Store(ctx: Context) {
         val cutoff = today() - 400
         for ((day, s) in days) {
             if (day < cutoff) continue
-            o.put(day.toString(), JSONObject().put("r", s.reviews).put("n", s.newCards).put("t", s.tested).put("s", s.shadowed))
+            o.put(day.toString(), JSONObject().put("r", s.reviews).put("n", s.newCards).put("t", s.tested).put("s", s.shadowed).put("rd", s.read).put("g", s.grammar))
         }
         prefs.edit().putString("days", o.toString()).apply()
     }
 
+    // ---- Stories read -----------------------------------------------------
+
+    fun loadRead(): Set<String> = prefs.getStringSet("read", emptySet())?.toSet() ?: emptySet()
+
+    fun saveRead(ids: Set<String>) {
+        prefs.edit().putStringSet("read", ids).apply()
+    }
+
     fun resetProgress() {
-        prefs.edit().remove("cards").remove("days").apply()
+        prefs.edit().remove("cards").remove("days").remove("read").apply()
     }
 
     private inline fun <reified T : Enum<T>> enumOr(name: String?, fallback: T): T =

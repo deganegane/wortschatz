@@ -232,6 +232,7 @@ private fun ColumnScope.CardFace(
                     Text(
                         when {
                             word.article != null -> "imenica · reci je s članom"
+                            word.cat != null -> "fraza · ${word.cat}"
                             else -> POS_LABELS[word.pos] ?: ""
                         },
                         style = MaterialTheme.typography.bodyMedium,

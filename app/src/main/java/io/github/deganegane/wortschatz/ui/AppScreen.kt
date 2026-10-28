@@ -32,15 +32,17 @@ import io.github.deganegane.wortschatz.UiState
 private enum class Tab(val label: String, val icon: Int) {
     TODAY("Danas", R.drawable.ic_today),
     TEST("Test", R.drawable.ic_quiz),
+    READING("Čitanje", R.drawable.ic_read),
     DICTIONARY("Rječnik", R.drawable.ic_book)
 }
 
-private enum class Screen { MAIN, REVIEW, SHADOW, SETTINGS }
+private enum class Screen { MAIN, REVIEW, SHADOW, GRAMMAR, SETTINGS }
 
 @Composable
 fun AppScreen(vm: AppViewModel, state: UiState) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var openStory by rememberSaveable { mutableStateOf<String?>(null) }
 
     if (state.loading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -50,12 +52,13 @@ fun AppScreen(vm: AppViewModel, state: UiState) {
     val screen = when {
         state.session != null -> Screen.REVIEW
         state.shadowing != null -> Screen.SHADOW
+        state.grammar != null -> Screen.GRAMMAR
         showSettings -> Screen.SETTINGS
         else -> Screen.MAIN
     }
 
     BackHandler(enabled = screen == Screen.SETTINGS) { showSettings = false }
-    BackHandler(enabled = screen == Screen.MAIN && tab != 0) { tab = 0 }
+    BackHandler(enabled = screen == Screen.MAIN && tab != 0 && openStory == null) { tab = 0 }
 
     AnimatedContent(
         targetState = screen,
@@ -67,6 +70,7 @@ fun AppScreen(vm: AppViewModel, state: UiState) {
         when (target) {
             Screen.REVIEW -> ReviewScreen(vm = vm, state = state)
             Screen.SHADOW -> ShadowingScreen(vm = vm, state = state)
+            Screen.GRAMMAR -> GrammarScreen(vm = vm, state = state)
             Screen.SETTINGS -> SettingsScreen(vm = vm, state = state, onBack = { showSettings = false })
             Screen.MAIN -> Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
@@ -95,6 +99,7 @@ fun AppScreen(vm: AppViewModel, state: UiState) {
                             tab = Tab.TODAY.ordinal
                             vm.startSession()
                         })
+                        Tab.READING -> ReadingTab(vm = vm, state = state, openStory = openStory, onOpen = { openStory = it })
                         Tab.DICTIONARY -> DictionaryTab(vm = vm, state = state)
                     }
                 }
