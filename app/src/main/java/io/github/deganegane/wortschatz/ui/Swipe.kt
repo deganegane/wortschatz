@@ -26,7 +26,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 /**
@@ -51,27 +53,46 @@ class SwipeState internal constructor(private val scope: CoroutineScope) {
     /** -1..1: how far towards a decision the current drag is. */
     val progress: Float get() = (offset.value / threshold).coerceIn(-1f, 1f)
 
+    /** A decision is flying out; further drags wait until it has been applied. */
+    internal var deciding = false
+        private set
+
     internal fun drag(delta: Float) {
+        if (deciding) return
         scope.launch { offset.snapTo(offset.value + delta) }
     }
 
     internal fun release(onDecide: (right: Boolean) -> Unit) {
-        scope.launch {
-            if (abs(offset.value) > threshold) {
-                val right = offset.value > 0
-                val target = if (right) width * 1.3f else -width * 1.3f
-                offset.animateTo(target, tween(140))
-                exit = target
-                onDecide(right)
-                offset.snapTo(0f)
-            } else {
-                offset.animateTo(0f, tween(160))
+        if (deciding) return
+        if (abs(offset.value) > threshold) {
+            deciding = true
+            val right = offset.value > 0
+            val target = if (right) width * 1.3f else -width * 1.3f
+            scope.launch {
+                try {
+                    offset.animateTo(target, tween(140))
+                } finally {
+                    withContext(NonCancellable) {
+                        exit = target
+                        onDecide(right)
+                        offset.snapTo(0f)
+                    }
+                    deciding = false
+                }
             }
+        } else {
+            scope.launch { offset.animateTo(0f, tween(160)) }
         }
     }
 
     internal fun cancel() {
+        if (deciding) return
         scope.launch { offset.animateTo(0f, tween(160)) }
+    }
+
+    /** A decision made with a button: the outgoing card fades in place instead of flying. */
+    fun clearExit() {
+        exit = 0f
     }
 }
 
@@ -90,18 +111,23 @@ fun Modifier.swipeArea(state: SwipeState, enabled: Boolean, key: Any?, onDecide:
         .pointerInput(enabled, key) {
             if (!enabled) return@pointerInput
             var crossed = false
-            detectHorizontalDragGestures(
-                onDragStart = { crossed = false },
-                onDragEnd = { state.release(onDecide) },
-                onDragCancel = { state.cancel() }
-            ) { change, delta ->
-                change.consume()
-                state.drag(delta)
-                val over = abs(state.offset.value + delta) > state.threshold
-                if (over != crossed) {
-                    crossed = over
-                    if (over) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            try {
+                detectHorizontalDragGestures(
+                    onDragStart = { crossed = false },
+                    onDragEnd = { state.release(onDecide) },
+                    onDragCancel = { state.cancel() }
+                ) { change, delta ->
+                    change.consume()
+                    state.drag(delta)
+                    val over = abs(state.offset.value + delta) > state.threshold
+                    if (over != crossed) {
+                        crossed = over
+                        if (over) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
                 }
+            } finally {
+                // Restarted mid-drag (new card, disabled): don't leave the card hanging.
+                if (state.offset.value != 0f && !state.deciding) state.cancel()
             }
         }
 }

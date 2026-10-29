@@ -108,7 +108,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val speech: Speech = Speech(app) { voice ->
         if (voice == VoiceState.READY) speech.chooseVoice(_state.value.settings.voiceName)
-        _state.update { it.copy(voice = voice, voices = speech.voices) }
+        // With no TTS engine at all, this runs inside the constructor, before `speech` is set.
+        _state.update { it.copy(voice = voice, voices = if (voice == VoiceState.READY) speech.voices else emptyList()) }
     }
 
     /** German voices on this phone (empty until the engine is ready). */
@@ -124,10 +125,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val listener = Listener(
         app,
         onLevel = { level, partial ->
-            _state.update { it.copy(listen = ListenState(ListenPhase.LISTENING, level, partial)) }
+            if (_state.value.listen.phase == ListenPhase.LISTENING) {
+                _state.update { it.copy(listen = ListenState(ListenPhase.LISTENING, level, partial)) }
+            }
         },
         onResult = { results -> onHeard(results) },
-        onError = { msg -> _state.update { it.copy(listen = ListenState(ListenPhase.ERROR, error = msg)) } }
+        onError = { msg ->
+            if (_state.value.listen.phase == ListenPhase.LISTENING) {
+                _state.update { it.copy(listen = ListenState(ListenPhase.ERROR, error = msg)) }
+            }
+        }
     )
 
     val recognitionAvailable: Boolean by lazy { listener.available }
@@ -165,9 +172,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Speech -----------------------------------------------------------
 
-    fun speak(text: String) = speech.speak(text, _state.value.settings.slowSpeech)
+    fun speak(text: String) {
+        // Never play into an open microphone (it would grade its own voice).
+        if (_state.value.listen.phase == ListenPhase.LISTENING) cancelListening()
+        speech.speak(text, _state.value.settings.slowSpeech)
+    }
 
-    fun speakSlow(text: String) = speech.speak(text, slow = true)
+    fun speakSlow(text: String) {
+        if (_state.value.listen.phase == ListenPhase.LISTENING) cancelListening()
+        speech.speak(text, slow = true)
+    }
 
     // ---- Listening --------------------------------------------------------
 
@@ -213,7 +227,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun micDenied() {
         _state.update {
-            it.copy(listen = ListenState(ListenPhase.ERROR, error = "Bez dopuštenja za mikrofon ne mogu čuti odgovor. Dodirni „Ne znam” ili dopusti mikrofon u postavkama."))
+            it.copy(listen = ListenState(ListenPhase.ERROR, error = "Bez dopuštenja za mikrofon ne mogu čuti odgovor. Dopusti mikrofon u postavkama mobitela ili uključi Tihi način."))
         }
     }
 
@@ -221,12 +235,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun finishListening() = listener.finish()
 
     fun cancelListening() {
+        speech.stop()
         listener.stop()
         _state.update { it.copy(listen = ListenState()) }
     }
 
     private fun onHeard(results: List<String>) {
         val s = _state.value
+        // A late callback after the card moved on or listening was cancelled.
+        if (s.listen.phase != ListenPhase.LISTENING) return
         when (listenFor) {
             ListenFor.REVIEW -> {
                 val session = s.session ?: return
@@ -291,9 +308,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { st -> st.copy(session = st.session?.copy(revealed = true), listen = ListenState()) }
     }
 
-    fun answer(grade: Grade) {
+    /** [expectReviewed] guards a swipe that finishes after the card already changed. */
+    fun answer(grade: Grade, expectReviewed: Int? = null) {
         val s = _state.value
         val session = s.session ?: return
+        if (expectReviewed != null && session.reviewed != expectReviewed) return
         val item = session.current ?: return
         val old = s.cards[item.rank]
         val wasNew = old == null || old.status != Status.LEARNING
@@ -325,6 +344,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** "Već znam ovo" on a new card: mark it known and bring in the next new word instead. */
     fun skipAsKnown() {
+        listener.stop()
+        speech.stop()
         val s = _state.value
         val session = s.session ?: return
         val item = session.current ?: return
@@ -343,7 +364,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     check = null,
                     repeat = null,
                     plannedTotal = session.plannedTotal - dropped
-                )
+                ),
+                listen = ListenState()
             )
         }
         persist(cards = cards)
@@ -396,7 +418,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun testAnswer(rank: Int, known: Boolean) {
         val s = _state.value
-        if (s.nextTestRank != rank || s.testVerify != null) return
+        if (s.nextTestRank != rank) return
+        s.testVerify?.let {
+            if (it.rank == rank) return
+            // A check left over from a word that has since been handled elsewhere.
+            _state.update { st -> st.copy(testVerify = null) }
+        }
         if (known && s.settings.verifyKnown) {
             knownSinceVerify++
             if (knownSinceVerify >= 10) {
@@ -453,6 +480,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun testUndo() {
         val s = _state.value
+        if (s.testVerify != null) return
         val (rank, prev, set) = s.testUndo.lastOrNull() ?: return
         if (s.cards[rank] != set) {
             // The word has moved on since (learned, edited in the dictionary): don't undo that.
@@ -475,7 +503,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             Status.LEARNING -> s.cards // only the scheduler puts words into LEARNING
             else -> s.cards + (rank to Card(status))
         }
-        _state.update { it.copy(cards = cards) }
+        _state.update { it.copy(cards = cards, testVerify = null) }
         persist(cards = cards)
     }
 
@@ -504,7 +532,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun resetProgress() {
         store.resetProgress()
         _state.update {
-            it.copy(cards = emptyMap(), days = emptyMap(), readIds = emptySet(), testUndo = emptyList(), session = null)
+            it.copy(cards = emptyMap(), days = emptyMap(), readIds = emptySet(), testUndo = emptyList(), session = null, testVerify = null)
         }
     }
 

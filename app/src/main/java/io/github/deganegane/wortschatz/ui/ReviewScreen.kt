@@ -88,7 +88,7 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
                 .navigationBarsPadding()
                 // Once the answer is shown: swipe anywhere on the screen — left "Opet", right "Dobro".
                 .swipeArea(swipe, enabled = swipeOn, key = swipeKey) { right ->
-                    vm.answer(if (right) Grade.GOOD else Grade.AGAIN)
+                    vm.answer(if (right) Grade.GOOD else Grade.AGAIN, expectReviewed = session.reviewed)
                 }
         ) {
             // Top bar: close + progress
@@ -150,9 +150,9 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
                 transitionSpec = { (fadeIn() + slideInHorizontally { it / 6 }) togetherWith fadeOut() },
                 modifier = Modifier.weight(1f),
                 label = "card"
-            ) { (qi, _) ->
+            ) { (qi, rev) ->
                 val w = state.word(qi.rank) ?: word
-                val current = qi == item
+                val current = rev == session.reviewed
                 Column(
                     Modifier
                         .fillMaxSize()
@@ -188,7 +188,10 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
                             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
                         )
                         GradeButtons(
-                            onGrade = vm::answer,
+                            onGrade = {
+                                swipe.clearExit()
+                                vm.answer(it)
+                            },
                             preview = Srs.preview(state.cards[item.rank], state.today, state.settings.retention),
                             suggested = session.check?.suggested
                         )
@@ -344,7 +347,10 @@ private fun ColumnScope.CardFace(
 
     if (item.isNew && isCurrent) {
         Spacer(Modifier.height(8.dp))
-        TextButton(onClick = { vm.skipAsKnown() }, modifier = Modifier.align(Alignment.End)) {
+        TextButton(onClick = {
+            swipe.clearExit()
+            vm.skipAsKnown()
+        }, modifier = Modifier.align(Alignment.End)) {
             Text("Već znam ovu riječ")
         }
     }

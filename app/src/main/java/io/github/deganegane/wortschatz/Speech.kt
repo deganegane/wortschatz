@@ -123,7 +123,9 @@ class Speech(context: Context, private val onState: (VoiceState) -> Unit) {
         val id = "w${++counter}"
         if (onDone != null) pendingDone[id] = onDone
         engine.setSpeechRate(if (slow) 0.7f else 0.95f)
-        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
+        if (engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) != TextToSpeech.SUCCESS) {
+            pendingDone.remove(id)?.let { main.post(it) }
+        }
     }
 
     fun stop() {
