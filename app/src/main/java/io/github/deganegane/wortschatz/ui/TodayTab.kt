@@ -2,6 +2,18 @@ package io.github.deganegane.wortschatz.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -61,311 +73,256 @@ import java.util.Locale
 @Composable
 fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSettings: () -> Unit) {
     val cs = MaterialTheme.colorScheme
+    val a = LocalArticles.current
     val due = state.dueToday
     val fresh = state.newLeftToday
     val pinned = due + fresh > 0 || state.newAvailable > 0
+    var showProgress by rememberSaveable { mutableStateOf(false) }
+
     Box(Modifier.fillMaxSize()) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-            // Room for the start button pinned at the bottom.
-            .padding(bottom = if (pinned) 80.dp else 0.dp)
-    ) {
-        // Header
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Wortschatz", style = MaterialTheme.typography.headlineMedium)
-                Text(
-                    LocalDate.ofEpochDay(state.today)
-                        .format(DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale("hr", "HR")))
-                        .replaceFirstChar { it.uppercase() },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = cs.onSurfaceVariant
-                )
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                // Room for the start button pinned at the bottom.
+                .padding(bottom = if (pinned) 88.dp else 16.dp)
+        ) {
+            // Header
+            Row(Modifier.fillMaxWidth().padding(start = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Danas", style = MaterialTheme.typography.headlineMedium)
+                    Text(
+                        LocalDate.ofEpochDay(state.today)
+                            .format(DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale("hr", "HR")))
+                            .replaceFirstChar { it.uppercase() },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = cs.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Filled.Settings, contentDescription = "Postavke", tint = cs.onSurfaceVariant)
+                }
             }
-            IconButton(onClick = onOpenSettings) {
-                Icon(Icons.Filled.Settings, contentDescription = "Postavke")
+
+            Spacer(Modifier.height(16.dp))
+            SummaryCard(state, due, fresh)
+
+            if (state.canUnlock) {
+                Spacer(Modifier.height(12.dp))
+                Banner(
+                    title = "Razina svladana!",
+                    text = "Otključaj riječi ${state.vocab.size + 1}–${(state.settings.level + 1) * 1000}.",
+                    action = "Otključaj",
+                    color = cs.secondary
+                ) { vm.setLevel(state.settings.level + 1) }
+            }
+            if (state.voice == VoiceState.NO_GERMAN || state.voice == VoiceState.NO_ENGINE) {
+                Spacer(Modifier.height(12.dp))
+                VoiceWarning()
+            }
+
+            Spacer(Modifier.height(24.dp))
+            SectionTitle("Vježbaj", modifier = Modifier.padding(start = 8.dp))
+            val tiles = buildList {
+                if (state.hasGaps) add(Tile(R.drawable.ic_grammar, "Gramatika", "10 rečenica", cs.primary) { vm.startGrammar() })
+                add(Tile(R.drawable.ic_shadow, "Shadowing", "slušaj i ponovi", cs.secondary) { vm.startShadowing() })
+                add(Tile(R.drawable.ic_quiz, "Test razine", "${state.tested} / ${state.vocab.size}", a.der, onOpenTest))
+                if (state.hardWords.size >= 5) {
+                    add(Tile(R.drawable.ic_hard, "Teške riječi", "${state.hardWords.size} ${plural(state.hardWords.size, "riječ", "riječi", "riječi")}", a.die) {
+                        vm.startHardSession()
+                    })
+                }
+            }
+            tiles.chunked(2).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    row.forEach { PracticeTile(it, Modifier.weight(1f)) }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+
+            Spacer(Modifier.height(14.dp))
+            Card(
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(containerColor = cs.surfaceContainer),
+                modifier = Modifier.fillMaxWidth().clickable { showProgress = !showProgress }
+            ) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Napredak", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "tvojih ${state.vocab.size} riječi · zadnja 2 tjedna",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = cs.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            if (showProgress) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = cs.onSurfaceVariant
+                        )
+                    }
+                    AnimatedVisibility(visible = showProgress, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                        Column {
+                            Spacer(Modifier.height(16.dp))
+                            BreakdownBar(state)
+                            Spacer(Modifier.height(12.dp))
+                            Legend(
+                                listOf(
+                                    Bucket.KNOWN to state.count(Bucket.KNOWN),
+                                    Bucket.MASTERED to state.count(Bucket.MASTERED),
+                                    Bucket.LEARNING to state.count(Bucket.LEARNING),
+                                    Bucket.TO_LEARN to state.count(Bucket.TO_LEARN),
+                                    Bucket.UNTESTED to state.count(Bucket.UNTESTED)
+                                )
+                            )
+                            Spacer(Modifier.height(20.dp))
+                            ActivityChart(state)
+                        }
+                    }
+                }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-        HeroCard(state)
-
-        Spacer(Modifier.height(16.dp))
-        PlanCard(state)
-
-        if (state.canUnlock) {
-            Spacer(Modifier.height(16.dp))
-            UnlockCard(vm, state)
-        }
-
-        if (state.hardWords.size >= 5) {
-            Spacer(Modifier.height(16.dp))
-            ExtraCard(
-                icon = R.drawable.ic_hard,
-                title = "Teške riječi (${state.hardWords.size})",
-                text = "Riječi koje ti najčešće padaju, u govornim karticama. Kratko i ciljano.",
-                container = cs.tertiaryContainer,
-                content = cs.onTertiaryContainer,
-                button = cs.tertiary,
-                onButton = cs.onTertiary
-            ) { vm.startHardSession() }
-        }
-
-        if (state.hasGaps) {
-        Spacer(Modifier.height(16.dp))
-        ExtraCard(
-            icon = R.drawable.ic_grammar,
-            title = "Gramatika",
-            text = "10 rečenica s prazninom na članu, zamjenici ili nastavku. Padeži bez tablica.",
-            container = cs.surfaceContainer,
-            content = cs.onSurface,
-            button = cs.primary,
-            onButton = cs.onPrimary
-        ) { vm.startGrammar() }
-        }
-
-        Spacer(Modifier.height(16.dp))
-        ExtraCard(
-            icon = R.drawable.ic_shadow,
-            title = "Shadowing",
-            text = "Slušaj i ponavljaj naglas 10 rečenica. Za izgovor i tečnost, oko 5 minuta.",
-            container = cs.secondaryContainer,
-            content = cs.onSecondaryContainer,
-            button = cs.secondary,
-            onButton = cs.onSecondary
-        ) { vm.startShadowing() }
-
-        if (state.voice == VoiceState.NO_GERMAN || state.voice == VoiceState.NO_ENGINE) {
-            Spacer(Modifier.height(16.dp))
-            VoiceWarning()
-        }
-
-        if (state.tested < state.vocab.size) {
-            Spacer(Modifier.height(16.dp))
-            TestCard(state, onOpenTest)
-        }
-
-        Spacer(Modifier.height(24.dp))
-        SectionTitle("Tvojih ${state.vocab.size} riječi")
-        BreakdownBar(state)
-        Spacer(Modifier.height(12.dp))
-        Legend(
-            listOf(
-                Bucket.KNOWN to state.count(Bucket.KNOWN),
-                Bucket.MASTERED to state.count(Bucket.MASTERED),
-                Bucket.LEARNING to state.count(Bucket.LEARNING),
-                Bucket.TO_LEARN to state.count(Bucket.TO_LEARN),
-                Bucket.UNTESTED to state.count(Bucket.UNTESTED)
-            )
-        )
-
-        Spacer(Modifier.height(24.dp))
-        SectionTitle("Zadnja dva tjedna")
-        ActivityChart(state)
-        Spacer(Modifier.height(32.dp))
-    }
-
-    // The day's main action, pinned within thumb reach above the navigation bar.
-    if (pinned) Box(
-        Modifier
-            .align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .background(cs.background.copy(alpha = 0.92f))
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-    ) {
-        when {
-            due + fresh > 0 -> Button(onClick = { vm.startSession() }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                Text("Kreni (${due + fresh})", style = MaterialTheme.typography.titleMedium)
+        // The day's main action, pinned within thumb reach above the navigation bar.
+        if (pinned) Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(cs.background)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            if (due + fresh > 0) {
+                Button(onClick = { vm.startSession() }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                    Text("Kreni (${due + fresh})", style = MaterialTheme.typography.titleMedium)
+                }
+            } else {
+                Button(
+                    onClick = { vm.startSession(extraNew = 5) },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = cs.surfaceContainerHigh, contentColor = cs.onSurface)
+                ) { Text("Još 5 novih riječi", style = MaterialTheme.typography.titleMedium) }
             }
-            state.newAvailable > 0 -> FilledTonalButton(
-                onClick = { vm.startSession(extraNew = 5) },
-                modifier = Modifier.fillMaxWidth().height(56.dp)
-            ) { Text("Još 5 novih riječi", style = MaterialTheme.typography.titleMedium) }
         }
-    }
     }
 }
 
+/** Progress ring plus today's numbers in one card. */
 @Composable
-private fun HeroCard(state: UiState) {
+private fun SummaryCard(state: UiState, due: Int, fresh: Int) {
     val cs = MaterialTheme.colorScheme
     val total = state.vocab.size.coerceAtLeast(1)
-    val target = state.familiar.toFloat() / total
-    val progress by animateFloatAsState(target, tween(900), label = "ring")
+    val progress by animateFloatAsState(state.familiar.toFloat() / total, tween(900), label = "ring")
+    val t = state.todayStat
     Card(
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer)
     ) {
         Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(128.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(104.dp), contentAlignment = Alignment.Center) {
                 val track = cs.onPrimaryContainer.copy(alpha = 0.14f)
                 val fill = cs.primary
                 Canvas(Modifier.fillMaxSize()) {
-                    val stroke = 12.dp.toPx()
+                    val stroke = 10.dp.toPx()
                     val inset = stroke / 2
-                    val arcSize = Size(size.width - stroke, size.height - stroke)
-                    drawArc(track, -90f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+                    val arc = Size(size.width - stroke, size.height - stroke)
+                    drawArc(track, -90f, 360f, false, Offset(inset, inset), arc, style = Stroke(stroke, cap = StrokeCap.Round))
                     if (progress > 0f) {
-                        drawArc(fill, -90f, 360f * progress, false, Offset(inset, inset), arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+                        drawArc(fill, -90f, 360f * progress.coerceAtLeast(0.01f), false, Offset(inset, inset), arc, style = Stroke(stroke, cap = StrokeCap.Round))
                     }
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(state.familiar.toString(), style = MaterialTheme.typography.headlineLarge)
-                    Text("od ${state.vocab.size}", style = MaterialTheme.typography.labelMedium)
+                    Text(state.familiar.toString(), style = MaterialTheme.typography.headlineMedium)
+                    Text("od ${state.vocab.size}", style = MaterialTheme.typography.labelSmall)
                 }
             }
-            Spacer(Modifier.width(20.dp))
+            Spacer(Modifier.width(18.dp))
             Column(Modifier.weight(1f)) {
-                Text("riječi koje znaš ili učiš", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(14.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        painterResource(R.drawable.ic_flame),
-                        contentDescription = null,
-                        tint = if (state.streak > 0) cs.tertiary else cs.onPrimaryContainer.copy(alpha = 0.4f),
-                        modifier = Modifier.size(22.dp)
+                Text(
+                    when {
+                        due + fresh > 0 -> "Čeka te ${due + fresh} ${plural(due + fresh, "kartica", "kartice", "kartica")}"
+                        else -> "Gotovo za danas!"
+                    },
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(Modifier.height(10.dp))
+                Row {
+                    MiniStat(t.reviews.toString(), "ponovljeno", Modifier.weight(1f))
+                    MiniStat(t.newCards.toString(), "novih", Modifier.weight(1f))
+                    MiniStat(state.streak.toString(), plural(state.streak, "dan", "dana", "dana") + " niz", Modifier.weight(1f), accent = state.streak > 0)
+                }
+                if (state.settings.level < state.maxLevel) {
+                    Spacer(Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = { (state.solid.toFloat() / state.unlockTarget.coerceAtLeast(1)).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)),
+                        color = cs.secondary,
+                        trackColor = cs.onPrimaryContainer.copy(alpha = 0.14f)
                     )
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        "${state.streak} ${plural(state.streak, "dan", "dana", "dana")} zaredom",
-                        style = MaterialTheme.typography.titleSmall
+                        "${state.solid} / ${state.unlockTarget} do razine ${state.settings.level + 1}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = cs.onPrimaryContainer.copy(alpha = 0.8f)
                     )
                 }
-                Spacer(Modifier.height(6.dp))
-                val t = state.todayStat
-                Text(
-                    "Danas: ${t.reviews} ${plural(t.reviews, "ponavljanje", "ponavljanja", "ponavljanja")}" +
-                        if (t.newCards > 0) ", ${t.newCards} ${plural(t.newCards, "nova", "nove", "novih")}" else "",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = cs.onPrimaryContainer.copy(alpha = 0.8f)
-                )
             }
         }
     }
 }
 
 @Composable
-private fun PlanCard(state: UiState) {
+private fun MiniStat(value: String, label: String, modifier: Modifier = Modifier, accent: Boolean = false) {
     val cs = MaterialTheme.colorScheme
-    val due = state.dueToday
-    val fresh = state.newLeftToday
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = cs.surfaceContainer)
-    ) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Za danas", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(12.dp))
-            Row {
-                PlanStat("ponavljanje", due, Modifier.weight(1f))
-                PlanStat("novih riječi", fresh, Modifier.weight(1f))
-            }
-            if (due + fresh == 0) {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Sve je gotovo za danas. Bravo!",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun UnlockCard(vm: AppViewModel, state: UiState) {
-    val cs = MaterialTheme.colorScheme
-    val next = state.settings.level + 1
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer)
-    ) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Razina svladana!", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Znaš ili si svladao ${state.solid} od ${state.vocab.size} riječi. Otključaj riječi " +
-                    "${state.vocab.size + 1}–${next * 1000}: idu u test i u dnevno učenje redom od najčešćih.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Spacer(Modifier.height(12.dp))
-            Button(onClick = { vm.setLevel(next) }) { Text("Otključaj ${next * 1000} riječi") }
-        }
-    }
-}
-
-@Composable
-private fun ExtraCard(
-    icon: Int,
-    title: String,
-    text: String,
-    container: androidx.compose.ui.graphics.Color,
-    content: androidx.compose.ui.graphics.Color,
-    button: androidx.compose.ui.graphics.Color,
-    onButton: androidx.compose.ui.graphics.Color,
-    onClick: () -> Unit
-) {
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = container, contentColor = content)
-    ) {
-        Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(32.dp))
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(text, style = MaterialTheme.typography.bodySmall)
-            }
-            Spacer(Modifier.width(12.dp))
-            FilledTonalButton(
-                onClick = onClick,
-                colors = ButtonDefaults.filledTonalButtonColors(containerColor = button, contentColor = onButton)
-            ) { Text("Kreni") }
-        }
-    }
-}
-
-@Composable
-private fun PlanStat(label: String, value: Int, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text(value.toString(), style = MaterialTheme.typography.displaySmall)
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleLarge, color = if (accent) cs.secondary else cs.onPrimaryContainer)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = cs.onPrimaryContainer.copy(alpha = 0.8f), maxLines = 1)
     }
 }
 
+private class Tile(val icon: Int, val title: String, val sub: String, val color: Color, val onClick: () -> Unit)
+
+/** A practice mode: tap anywhere on the tile to start. */
 @Composable
-private fun TestCard(state: UiState, onOpenTest: () -> Unit) {
+private fun PracticeTile(t: Tile, modifier: Modifier = Modifier) {
     val cs = MaterialTheme.colorScheme
-    val total = state.vocab.size
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = cs.surfaceContainer),
+        modifier = modifier.clickable(onClick = t.onClick)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Box(
+                Modifier.size(36.dp).clip(MaterialTheme.shapes.small).background(t.color.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(painterResource(t.icon), contentDescription = null, tint = t.color, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(t.title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+            Text(t.sub, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, maxLines = 1)
+        }
+    }
+}
+
+/** A slim notice with one action. */
+@Composable
+private fun Banner(title: String, text: String, action: String, color: Color, onAction: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
     Card(
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = cs.surfaceContainer)
     ) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Provjera razine", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                if (state.tested == 0) {
-                    "Prođi listu \"znam / ne znam\" da aplikacija zna što već znaš. Učit ćeš samo ono što ti treba."
-                } else {
-                    "Prošao si ${state.tested} od $total riječi. Nastavi kad uhvatiš pet minuta."
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = cs.onSurfaceVariant
-            )
-            Spacer(Modifier.height(12.dp))
-            LinearProgressIndicator(
-                progress = { state.tested.toFloat() / total.coerceAtLeast(1) },
-                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)),
-                trackColor = cs.surfaceContainerHighest
-            )
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = onOpenTest) {
-                Text(if (state.tested == 0) "Započni test" else "Nastavi test")
+        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).clip(RoundedCornerShape(50)).background(color))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(text, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             }
+            TextButton(onClick = onAction) { Text(action) }
         }
     }
 }
@@ -373,25 +330,16 @@ private fun TestCard(state: UiState, onOpenTest: () -> Unit) {
 @Composable
 private fun VoiceWarning() {
     val context = LocalContext.current
-    val cs = MaterialTheme.colorScheme
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer)
+    Banner(
+        title = "Nema njemačkog glasa",
+        text = "Instaliraj Deutsch u postavkama govora na mobitelu.",
+        action = "Otvori",
+        color = MaterialTheme.colorScheme.error
     ) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Nema njemačkog glasa", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Za izgovor instaliraj njemački jezik u postavkama pretvaranja teksta u govor (Google govorne usluge → Instaliraj glasovne podatke → Deutsch).",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            TextButton(onClick = {
-                try {
-                    context.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                } catch (e: ActivityNotFoundException) {
-                    // Some phones hide this screen; nothing else to open.
-                }
-            }) { Text("Otvori postavke govora") }
+        try {
+            context.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: ActivityNotFoundException) {
+            // Some phones hide this screen; nothing else to open.
         }
     }
 }

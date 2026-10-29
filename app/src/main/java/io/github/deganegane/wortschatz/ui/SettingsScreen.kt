@@ -6,6 +6,19 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -61,28 +74,49 @@ import io.github.deganegane.wortschatz.ThemeMode
 import io.github.deganegane.wortschatz.UiState
 import io.github.deganegane.wortschatz.VoiceState
 
+private enum class SettingsPage(val title: String) {
+    LEVEL("Razina"),
+    LEARNING("Učenje"),
+    SPEAKING("Govor i mikrofon"),
+    VOICE("Izgovor"),
+    REMINDER("Podsjetnik"),
+    LOOK("Izgled")
+}
+
 @Suppress("DEPRECATION")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
     val s = state.settings
     val context = LocalContext.current
+    val cs = MaterialTheme.colorScheme
+    val a = LocalArticles.current
+    var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     var showTime by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
+    var voicePicker by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = page != null) { page = null }
 
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         vm.updateSettings { it.copy(reminderOn = granted) }
     }
 
+    val currentVoice = state.voices.firstOrNull { it.name == s.voiceName }
+        ?: state.voices.firstOrNull { !it.network }
+        ?: state.voices.firstOrNull()
+
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = cs.background,
         topBar = {
             TopAppBar(
-                title = { Text("Postavke") },
+                title = { Text(page?.title ?: "Postavke") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Natrag") }
+                    IconButton(onClick = { if (page != null) page = null else onBack() }) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Natrag")
+                    }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = cs.background)
             )
         }
     ) { padding ->
@@ -91,175 +125,204 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 16.dp)
         ) {
-            Group("Razina") {
-                LevelSection(vm, state)
-            }
-
-            Group("Učenje") {
-                Label("Novih riječi dnevno", "Koliko novih riječi uvodiš svaki dan. 10 je dobra mjera uz par minuta ponavljanja.")
-                Choice(listOf(5, 10, 15, 20), s.newPerDay, { it.toString() }) { n -> vm.updateSettings { it.copy(newPerDay = n) } }
-                Spacer(Modifier.height(16.dp))
-                Label(
-                    "Način vježbe",
-                    when (s.practice) {
-                        Practice.CLASSIC -> "Samo prepoznavanje: vidiš njemačku riječ i sjetiš se značenja."
-                        Practice.SPEAKING -> "Samo govor: izgovaraš njemačku riječ iz hrvatskog ili dopunjavaš rečenicu naglas."
-                        Practice.MIXED -> "Nove riječi prvo prepoznaješ, a kad ih par puta vidiš, sve češće ih izgovaraš (preporučeno)."
+            when (page) {
+                null -> {
+                    Spacer(Modifier.height(8.dp))
+                    Panel {
+                        val rows = listOf(
+                            Triple(SettingsPage.LEVEL, cs.secondary,
+                                "${s.level * 1000} riječi" + if (s.level < state.maxLevel) " · ${state.solid} / ${state.unlockTarget} do sljedeće" else ""),
+                            Triple(SettingsPage.LEARNING, cs.primary,
+                                "${s.newPerDay} novih dnevno · ${s.practice.label} · pamćenje ${(s.retention * 100).toInt()} %"),
+                            Triple(SettingsPage.SPEAKING, a.der,
+                                when {
+                                    s.quiet -> "Tihi način uključen"
+                                    s.speakAnswers -> "Odgovori glasom" + if (s.repeatNew) " · ponovi nove" else ""
+                                    else -> "Bez mikrofona"
+                                }),
+                            Triple(SettingsPage.VOICE, a.das,
+                                (currentVoice?.label?.substringBefore(" · ") ?: "Zadani glas") +
+                                    (if (currentVoice?.network == true) " (online)" else "") +
+                                    if (s.autoSpeak) " · automatski" else ""),
+                            Triple(SettingsPage.REMINDER, a.die,
+                                if (s.reminderOn) "Svaki dan u %02d:%02d".format(s.reminderHour, s.reminderMinute) else "Isključen"),
+                            Triple(SettingsPage.LOOK, cs.onSurfaceVariant,
+                                "Tema: ${s.themeMode.label.lowercase()}" + if (s.dynamicColor) " · boje iz pozadine" else " · paleta Jadran")
+                        )
+                        rows.forEachIndexed { i, (p, color, summary) ->
+                            if (i > 0) HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.6f), modifier = Modifier.padding(start = 56.dp))
+                            NavRow(p.title, summary, color) { page = p }
+                        }
                     }
-                )
-                Choice(Practice.entries, s.practice, { it.label }) { p -> vm.updateSettings { it.copy(practice = p) } }
-                Spacer(Modifier.height(16.dp))
-                Label(
-                    "Ciljano pamćenje",
-                    "Koliko je vjerojatno da se sjetiš riječi kad dođe na red (FSRS). Više = češća ponavljanja."
-                )
-                Choice(listOf(0.85, 0.9, 0.95), s.retention, { "${(it * 100).toInt()} %" }) { r ->
-                    vm.updateSettings { it.copy(retention = r) }
-                }
-                Spacer(Modifier.height(8.dp))
-                ToggleRow(
-                    "Fraze za razgovor",
-                    "Svaka treća nova kartica je gotova rečenica (\"Das kommt darauf an.\")",
-                    s.phrasesOn
-                ) { v -> vm.updateSettings { it.copy(phrasesOn = v) } }
-                ToggleRow(
-                    "Odgovaraj glasom",
-                    if (vm.recognitionAvailable) "Mikrofon provjerava izgovorenu riječ i član" else "Prepoznavanje govora nije dostupno na ovom mobitelu",
-                    s.speakAnswers
-                ) { v -> vm.updateSettings { it.copy(speakAnswers = v) } }
-                ToggleRow(
-                    "Ponovi nove riječi naglas",
-                    "Kad čuješ novu riječ, mikrofon se sam uključi da je ponoviš",
-                    s.repeatNew
-                ) { v -> vm.updateSettings { it.copy(repeatNew = v) } }
-                ToggleRow(
-                    "Uvijek ponovi naglas",
-                    "Isto i na svakoj kartici prepoznavanja nakon što vidiš odgovor (sporije, ali bolje pamtiš)",
-                    s.repeatAll
-                ) { v -> vm.updateSettings { it.copy(repeatAll = v) } }
-                ToggleRow(
-                    "Tihi način",
-                    "Bez mikrofona, npr. u tramvaju ili na poslu: govorne kartice otkrivaš dodirom",
-                    s.quiet
-                ) { v -> vm.updateSettings { it.copy(quiet = v) } }
-                ToggleRow(
-                    "Provjera u testu razine",
-                    "Otprilike svaki deseti \"znam\" traži da odabereš točno značenje",
-                    s.verifyKnown
-                ) { v -> vm.updateSettings { it.copy(verifyKnown = v) } }
-            }
-
-            Group("Izgovor") {
-                ToggleRow("Automatski izgovor", "Pročitaj riječ čim se kartica pokaže", s.autoSpeak) { v ->
-                    vm.updateSettings { it.copy(autoSpeak = v) }
-                }
-                ToggleRow("Sporiji izgovor", "Za lakše razaznavanje glasova", s.slowSpeech) { v ->
-                    vm.updateSettings { it.copy(slowSpeech = v) }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    when (state.voice) {
-                        VoiceState.READY -> "Njemački glas je spreman."
-                        VoiceState.LOADING -> "Učitavam glas…"
-                        VoiceState.NO_GERMAN -> "Na mobitelu nema njemačkog glasa. Instaliraj ga u postavkama govora."
-                        VoiceState.NO_ENGINE -> "Nije pronađen pretvarač teksta u govor."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                TextButton(onClick = {
-                    try {
-                        context.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    } catch (e: ActivityNotFoundException) {
-                        // Not available on this phone.
-                    }
-                }) { Text("Postavke govora") }
-                if (state.voices.size > 1) {
-                    Spacer(Modifier.height(12.dp))
-                    Label("Glas", "Online glasovi zvuče prirodnije, ali svaka kartica čeka internet. Dodirni za probu.")
-                    state.voices.forEach { v ->
-                        val selected = v.name == s.voiceName || (s.voiceName == null && v.name == state.voices.firstOrNull { !it.network }?.name)
+                    Spacer(Modifier.height(16.dp))
+                    Panel {
                         Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    vm.updateSettings { it.copy(voiceName = v.name) }
-                                    vm.speak("Guten Tag! Wie geht es dir?")
-                                }
-                                .padding(vertical = 8.dp),
+                            Modifier.fillMaxWidth().clickable { confirmReset = true }.padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(selected = selected, onClick = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(v.label, style = MaterialTheme.typography.bodyMedium)
+                            Text("Resetiraj napredak", style = MaterialTheme.typography.titleSmall, color = cs.error)
+                        }
+                    }
+                    Text(
+                        "Wortschatz ${BuildConfigInfo.versionName(context)} · ${state.allCount} riječi i ${state.phrases.size} fraza · " +
+                            "font Space Grotesk (SIL OFL)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 20.dp)
+                    )
+                }
+
+                SettingsPage.LEVEL -> Panel(padded = true) { LevelSection(vm, state) }
+
+                SettingsPage.LEARNING -> {
+                    Panel(padded = true) {
+                        InfoLabel("Novih riječi dnevno", "10 je dobra mjera uz par minuta ponavljanja dnevno.")
+                        Choice(listOf(5, 10, 15, 20), s.newPerDay, { it.toString() }) { n -> vm.updateSettings { it.copy(newPerDay = n) } }
+                        Spacer(Modifier.height(18.dp))
+                        InfoLabel(
+                            "Način vježbe",
+                            "Klasično: vidiš njemačku riječ i sjetiš se značenja. Govor: izgovaraš njemačku riječ ili dopunjavaš rečenicu. " +
+                                "Mješovito: nove riječi prvo prepoznaješ, a zatim ih sve češće izgovaraš (preporučeno)."
+                        )
+                        Choice(Practice.entries, s.practice, { it.label }) { p -> vm.updateSettings { it.copy(practice = p) } }
+                        Spacer(Modifier.height(18.dp))
+                        InfoLabel(
+                            "Ciljano pamćenje",
+                            "Koliko je vjerojatno da se sjetiš riječi kad dođe na red (FSRS). Više znači češća ponavljanja."
+                        )
+                        Choice(listOf(0.85, 0.9, 0.95), s.retention, { "${(it * 100).toInt()} %" }) { r ->
+                            vm.updateSettings { it.copy(retention = r) }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Panel(padded = true) {
+                        ToggleRow("Fraze za razgovor", "Svaka treća nova kartica", s.phrasesOn) { v -> vm.updateSettings { it.copy(phrasesOn = v) } }
+                        ToggleRow("Provjera u testu razine", "Svaki deseti \"znam\"", s.verifyKnown) { v -> vm.updateSettings { it.copy(verifyKnown = v) } }
+                    }
+                }
+
+                SettingsPage.SPEAKING -> {
+                    Panel(padded = true) {
+                        ToggleRow(
+                            "Odgovaraj glasom",
+                            if (vm.recognitionAvailable) "Mikrofon provjerava riječ i član" else "Nije dostupno na ovom mobitelu",
+                            s.speakAnswers
+                        ) { v -> vm.updateSettings { it.copy(speakAnswers = v) } }
+                        ToggleRow("Ponovi nove riječi naglas", "Mikrofon se sam uključi", s.repeatNew) { v -> vm.updateSettings { it.copy(repeatNew = v) } }
+                        ToggleRow("Uvijek ponovi naglas", "Na svakoj kartici prepoznavanja", s.repeatAll) { v -> vm.updateSettings { it.copy(repeatAll = v) } }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Panel(padded = true) {
+                        ToggleRow("Tihi način", "Bez mikrofona, za javna mjesta", s.quiet) { v -> vm.updateSettings { it.copy(quiet = v) } }
+                    }
+                }
+
+                SettingsPage.VOICE -> {
+                    Panel(padded = true) {
+                        ToggleRow("Automatski izgovor", "Kad se kartica pokaže", s.autoSpeak) { v -> vm.updateSettings { it.copy(autoSpeak = v) } }
+                        ToggleRow("Sporiji izgovor", null, s.slowSpeech) { v -> vm.updateSettings { it.copy(slowSpeech = v) } }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Panel {
+                        if (state.voices.size > 1) {
+                            NavRow("Glas", currentVoice?.label ?: "Zadani", a.das) { voicePicker = true }
+                            HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.6f), modifier = Modifier.padding(start = 56.dp))
+                        }
+                        NavRow("Probaj glas", "„Guten Tag! Wie geht es dir?“", cs.primary) { vm.speak("Guten Tag! Wie geht es dir?") }
+                        HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.6f), modifier = Modifier.padding(start = 56.dp))
+                        NavRow(
+                            "Postavke govora na mobitelu",
+                            when (state.voice) {
+                                VoiceState.READY -> "Njemački glas je spreman"
+                                VoiceState.LOADING -> "Učitavam glas…"
+                                VoiceState.NO_GERMAN -> "Nema njemačkog glasa — instaliraj ga ovdje"
+                                VoiceState.NO_ENGINE -> "Nije pronađen pretvarač teksta u govor"
+                            },
+                            cs.onSurfaceVariant
+                        ) {
+                            try {
+                                context.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            } catch (e: ActivityNotFoundException) {
+                                // Not available on this phone.
+                            }
                         }
                     }
                 }
-                Spacer(Modifier.height(4.dp))
-                TextButton(onClick = { vm.speak("Guten Tag! Wie geht es dir?") }) { Text("Probaj: \"Guten Tag! Wie geht es dir?\"") }
-            }
 
-            Group("Podsjetnik") {
-                ToggleRow(
-                    "Dnevni podsjetnik",
-                    "Samo ako taj dan još nisi vježbao",
-                    s.reminderOn
-                ) { on ->
-                    if (on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-                        PackageManager.PERMISSION_GRANTED
-                    ) {
-                        notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        vm.updateSettings { it.copy(reminderOn = on) }
+                SettingsPage.REMINDER -> Panel(padded = true) {
+                    ToggleRow("Dnevni podsjetnik", "Samo ako taj dan još nisi vježbao", s.reminderOn) { on ->
+                        if (on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                            PackageManager.PERMISSION_GRANTED
+                        ) {
+                            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            vm.updateSettings { it.copy(reminderOn = on) }
+                        }
+                    }
+                    if (s.reminderOn) {
+                        Row(
+                            Modifier.fillMaxWidth().clickable { showTime = true }.padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Vrijeme", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                            Text(
+                                "%02d:%02d".format(s.reminderHour, s.reminderMinute),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = cs.primary
+                            )
+                        }
                     }
                 }
-                if (s.reminderOn) {
+
+                SettingsPage.LOOK -> Panel(padded = true) {
+                    InfoLabel("Tema", null)
+                    Choice(ThemeMode.entries, s.themeMode, { it.label }) { m -> vm.updateSettings { it.copy(themeMode = m) } }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        Spacer(Modifier.height(10.dp))
+                        ToggleRow("Boje iz pozadine", "Material You umjesto palete Jadran", s.dynamicColor) { v ->
+                            vm.updateSettings { it.copy(dynamicColor = v) }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (voicePicker) {
+        ModalBottomSheet(
+            onDismissRequest = { voicePicker = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = cs.surfaceContainerLow
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp).navigationBarsPadding()) {
+                Text("Glas", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Online glasovi zvuče prirodnije, ali svaka kartica čeka internet. Dodirni za probu.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = cs.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                state.voices.forEach { v ->
                     Row(
-                        Modifier.fillMaxWidth().clickable { showTime = true }.padding(vertical = 12.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                vm.updateSettings { it.copy(voiceName = v.name) }
+                                vm.speak("Guten Tag! Wie geht es dir?")
+                            }
+                            .padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Vrijeme", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                        Text(
-                            "%02d:%02d".format(s.reminderHour, s.reminderMinute),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        RadioButton(selected = v.name == currentVoice?.name, onClick = null)
+                        Spacer(Modifier.width(12.dp))
+                        Text(v.label, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
-
-            Group("Izgled") {
-                Label("Tema", null)
-                Choice(ThemeMode.entries, s.themeMode, { it.label }) { m -> vm.updateSettings { it.copy(themeMode = m) } }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    Spacer(Modifier.height(8.dp))
-                    ToggleRow("Boje iz pozadine", "Material You umjesto palete Jadran", s.dynamicColor) { v ->
-                        vm.updateSettings { it.copy(dynamicColor = v) }
-                    }
-                }
-            }
-
-            Group("Napredak") {
-                Text(
-                    "Briše rezultate testa, učenje i niz dana. Postavke ostaju.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                TextButton(onClick = { confirmReset = true }) {
-                    Text("Resetiraj napredak", color = MaterialTheme.colorScheme.error)
-                }
-            }
-
-            Text(
-                "Wortschatz ${BuildConfigInfo.versionName(context)} · ${state.allCount} najčešćih riječi s primjerima za razgovor. " +
-                    "Font Space Grotesk (SIL Open Font License).",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 24.dp)
-            )
         }
     }
 
@@ -282,15 +345,55 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text("Resetirati napredak?") },
-            text = { Text("Ovo briše sve oznake \"znam / ne znam\", raspored ponavljanja i niz dana. Ne može se poništiti.") },
+            text = { Text("Ovo briše sve oznake \"znam / ne znam\", raspored ponavljanja i niz dana. Postavke ostaju. Ne može se poništiti.") },
             confirmButton = {
                 TextButton(onClick = {
                     vm.resetProgress()
                     confirmReset = false
-                }) { Text("Resetiraj", color = MaterialTheme.colorScheme.error) }
+                }) { Text("Resetiraj", color = cs.error) }
             },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Odustani") } }
         )
+    }
+}
+
+/** A rounded surface that groups rows. */
+@Composable
+private fun Panel(padded: Boolean = false, content: @Composable () -> Unit) {
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        Column(Modifier.fillMaxWidth().then(if (padded) Modifier.padding(16.dp) else Modifier)) { content() }
+    }
+}
+
+/** A settings group row: coloured dot, title, one-line summary, chevron. */
+@Composable
+private fun NavRow(title: String, summary: String, color: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(28.dp).clip(CircleShape).background(color.copy(alpha = 0.18f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(color))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = cs.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null, tint = cs.onSurfaceVariant)
     }
 }
 
@@ -353,24 +456,25 @@ private fun LevelSection(vm: AppViewModel, state: UiState) {
     }
 }
 
+/** Section label; a longer explanation opens with the (i) button instead of always taking space. */
 @Composable
-private fun Group(title: String, content: @Composable () -> Unit) {
-    Spacer(Modifier.height(12.dp))
-    SectionTitle(title)
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-    ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) { content() }
+private fun InfoLabel(title: String, info: String?) {
+    var open by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+        if (info != null) {
+            IconButton(onClick = { open = !open }, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.Outlined.Info,
+                    contentDescription = "Objašnjenje",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
     }
-    Spacer(Modifier.height(8.dp))
-}
-
-@Composable
-private fun Label(title: String, sub: String?) {
-    Text(title, style = MaterialTheme.typography.titleSmall)
-    if (sub != null) {
-        Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (open && info != null) {
+        Text(info, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     Spacer(Modifier.height(8.dp))
 }
