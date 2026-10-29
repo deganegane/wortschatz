@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,11 +61,16 @@ import java.util.Locale
 @Composable
 fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSettings: () -> Unit) {
     val cs = MaterialTheme.colorScheme
+    val due = state.dueToday
+    val fresh = state.newLeftToday
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
+            // Room for the start button pinned at the bottom.
+            .padding(bottom = 80.dp)
     ) {
         // Header
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -87,7 +93,7 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
         HeroCard(state)
 
         Spacer(Modifier.height(16.dp))
-        PlanCard(vm, state)
+        PlanCard(state)
 
         if (state.canUnlock) {
             Spacer(Modifier.height(16.dp))
@@ -160,6 +166,26 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
         ActivityChart(state)
         Spacer(Modifier.height(32.dp))
     }
+
+    // The day's main action, pinned within thumb reach above the navigation bar.
+    Box(
+        Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .background(cs.background.copy(alpha = 0.92f))
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        when {
+            due + fresh > 0 -> Button(onClick = { vm.startSession() }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Text("Kreni (${due + fresh})", style = MaterialTheme.typography.titleMedium)
+            }
+            state.newAvailable > 0 -> FilledTonalButton(
+                onClick = { vm.startSession(extraNew = 5) },
+                modifier = Modifier.fillMaxWidth().height(56.dp)
+            ) { Text("Još 5 novih riječi", style = MaterialTheme.typography.titleMedium) }
+        }
+    }
+    }
 }
 
 @Composable
@@ -221,11 +247,10 @@ private fun HeroCard(state: UiState) {
 }
 
 @Composable
-private fun PlanCard(vm: AppViewModel, state: UiState) {
+private fun PlanCard(state: UiState) {
     val cs = MaterialTheme.colorScheme
     val due = state.dueToday
     val fresh = state.newLeftToday
-    val moreAvailable = state.newAvailable > 0
     Card(
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = cs.surfaceContainer)
@@ -237,23 +262,13 @@ private fun PlanCard(vm: AppViewModel, state: UiState) {
                 PlanStat("ponavljanje", due, Modifier.weight(1f))
                 PlanStat("novih riječi", fresh, Modifier.weight(1f))
             }
-            Spacer(Modifier.height(16.dp))
-            if (due + fresh > 0) {
-                Button(onClick = { vm.startSession() }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                    Text("Kreni (${due + fresh})", style = MaterialTheme.typography.titleMedium)
-                }
-            } else {
+            if (due + fresh == 0) {
+                Spacer(Modifier.height(12.dp))
                 Text(
                     "Sve je gotovo za danas. Bravo!",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium
                 )
-                if (moreAvailable) {
-                    Spacer(Modifier.height(10.dp))
-                    FilledTonalButton(onClick = { vm.startSession(extraNew = 5) }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Još 5 novih riječi")
-                    }
-                }
             }
         }
     }

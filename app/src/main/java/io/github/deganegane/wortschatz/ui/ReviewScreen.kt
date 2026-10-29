@@ -171,8 +171,27 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
                 }
             }
 
-            // Bottom: microphone, reveal, or grade
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            // Bottom: secondary actions, then microphone, reveal, or grade — all within thumb reach.
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                val showWord = item.mode == Mode.RECOGNIZE || item.isNew || revealed
+                ActionBar {
+                    ActionItem(painterResource(io.github.deganegane.wortschatz.R.drawable.ic_close), "Završi") { vm.closeSession() }
+                    ActionItem(painterResource(io.github.deganegane.wortschatz.R.drawable.ic_volume), "Riječ", enabled = showWord) {
+                        vm.speak(word.spoken())
+                    }
+                    ActionItem(
+                        painterResource(io.github.deganegane.wortschatz.R.drawable.ic_shadow),
+                        "Rečenica",
+                        enabled = word.example.isNotBlank() && (revealed || item.mode == Mode.RECOGNIZE)
+                    ) { vm.speak(word.example) }
+                    if (item.isNew) {
+                        ActionItem(painterResource(io.github.deganegane.wortschatz.R.drawable.ic_check), "Već znam") {
+                            swipe.clearExit()
+                            vm.skipAsKnown()
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
                 when {
                     revealed -> {
                         if (canRepeat) {
@@ -247,7 +266,6 @@ private fun ColumnScope.CardFace(
                     else -> Pill("#${word.rank}", cs.surfaceContainerHighest, cs.onSurfaceVariant)
                 }
                 Spacer(Modifier.weight(1f))
-                if (mode == Mode.RECOGNIZE || revealed) SpeakButton(onClick = { vm.speak(word.spoken()) })
             }
             Spacer(Modifier.height(24.dp))
 
@@ -328,7 +346,6 @@ private fun ColumnScope.CardFace(
                                 FeedbackBanner(check, word, cloze = true)
                                 Spacer(Modifier.height(16.dp))
                             }
-                            TextButton(onClick = { vm.speak(word.example) }) { Text("Poslušaj rečenicu") }
                             HorizontalDivider(color = cs.outlineVariant)
                             Spacer(Modifier.height(16.dp))
                             Headword(word, MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
@@ -345,15 +362,6 @@ private fun ColumnScope.CardFace(
         }
     }
 
-    if (item.isNew && isCurrent) {
-        Spacer(Modifier.height(8.dp))
-        TextButton(onClick = {
-            swipe.clearExit()
-            vm.skipAsKnown()
-        }, modifier = Modifier.align(Alignment.End)) {
-            Text("Već znam ovu riječ")
-        }
-    }
 }
 
 @Composable

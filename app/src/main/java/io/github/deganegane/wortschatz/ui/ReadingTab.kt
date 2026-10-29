@@ -1,6 +1,10 @@
 package io.github.deganegane.wortschatz.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.res.painterResource
+import io.github.deganegane.wortschatz.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -155,24 +159,18 @@ private fun StoryScreen(vm: AppViewModel, state: UiState, story: Story, onBack: 
 
     Surface(Modifier.fillMaxSize(), color = cs.background) {
         Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Natrag") }
-                Text(
-                    "Razina ${story.level} · ${story.wordCount} riječi",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = cs.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                SpeakButton(onClick = { vm.speak(story.de) }, size = 40.dp)
-                Spacer(Modifier.width(12.dp))
-            }
-
             Column(
                 Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp)
             ) {
+                Text(
+                    "Razina ${story.level} · ${story.wordCount} riječi",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = cs.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
                 Text(story.title, style = MaterialTheme.typography.headlineMedium)
                 Spacer(Modifier.height(16.dp))
                 val paragraphsDe = story.de.split("\n").filter { it.isNotBlank() }
@@ -199,15 +197,22 @@ private fun StoryScreen(vm: AppViewModel, state: UiState, story: Story, onBack: 
                     }
                 }
                 Spacer(Modifier.height(24.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { showHr = !showHr }) { Text(if (showHr) "Sakrij prijevod" else "Prijevod") }
-                    if (!read) {
-                        Button(onClick = { vm.markRead(story.id) }) { Text("Pročitano") }
-                    } else {
-                        FilledTonalButton(onClick = onBack) { Text("Natrag na popis") }
-                    }
+            }
+
+            // Story controls pinned at the bottom, within thumb reach.
+            HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.5f))
+            ActionBar(Modifier.background(cs.surfaceContainerLow).padding(vertical = 4.dp)) {
+                ActionItem(painterResource(R.drawable.ic_back), "Natrag") { onBack() }
+                ActionItem(painterResource(R.drawable.ic_volume), "Poslušaj") { vm.speak(story.de) }
+                ActionItem(painterResource(R.drawable.ic_slow), "Sporije") { vm.speakSlow(story.de) }
+                ActionItem(painterResource(R.drawable.ic_translate), if (showHr) "Sakrij" else "Prijevod") { showHr = !showHr }
+                ActionItem(
+                    painterResource(R.drawable.ic_check),
+                    if (read) "Pročitano" else "Gotovo",
+                    tint = if (read) LocalArticles.current.good else cs.onSurfaceVariant
+                ) {
+                    if (!read) vm.markRead(story.id) else onBack()
                 }
-                Spacer(Modifier.height(32.dp))
             }
         }
     }

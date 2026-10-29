@@ -16,7 +16,7 @@ android {
         targetSdk = 36
         // Every CI build gets a higher code, so each one can go to Play Console as-is.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 7
-        versionName = "2.4"
+        versionName = "2.5"
     }
 
     // One permanent key for every build, so each new APK installs over the previous one and

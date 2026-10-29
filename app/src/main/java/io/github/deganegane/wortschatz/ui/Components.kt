@@ -1,6 +1,7 @@
 package io.github.deganegane.wortschatz.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -184,5 +185,42 @@ fun Legend(items: List<Pair<Bucket, Int>>, modifier: Modifier = Modifier) {
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
+    }
+}
+
+/**
+ * A row of secondary actions at the bottom of a screen, within reach of the thumb:
+ * icon above a short label, spread evenly.
+ */
+@Composable
+fun ActionBar(modifier: Modifier = Modifier, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+        content = content
+    )
+}
+
+@Composable
+fun androidx.compose.foundation.layout.RowScope.ActionItem(
+    icon: androidx.compose.ui.graphics.painter.Painter,
+    label: String,
+    enabled: Boolean = true,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    onClick: () -> Unit
+) {
+    val color = if (enabled) tint else tint.copy(alpha = 0.35f)
+    Column(
+        Modifier
+            .weight(1f)
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1)
     }
 }

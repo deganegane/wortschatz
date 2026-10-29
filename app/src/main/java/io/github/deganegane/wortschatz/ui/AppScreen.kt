@@ -100,7 +100,7 @@ fun AppScreen(vm: AppViewModel, state: UiState) {
                             vm.startSession()
                         })
                         Tab.READING -> ReadingTab(vm = vm, state = state, openStory = openStory, onOpen = { openStory = it })
-                        Tab.DICTIONARY -> DictionaryTab(vm = vm, state = state)
+                        Tab.DICTIONARY -> DictionaryTab(vm = vm, state = state, bottomInset = padding.calculateBottomPadding())
                     }
                 }
             }

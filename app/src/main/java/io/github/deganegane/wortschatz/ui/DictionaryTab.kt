@@ -1,6 +1,11 @@
 package io.github.deganegane.wortschatz.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -57,7 +62,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DictionaryTab(vm: AppViewModel, state: UiState) {
+fun DictionaryTab(vm: AppViewModel, state: UiState, bottomInset: Dp = 0.dp) {
     val cs = MaterialTheme.colorScheme
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf(Bucket.ALL) }
@@ -76,14 +81,66 @@ fun DictionaryTab(vm: AppViewModel, state: UiState) {
     val listState = rememberLazyListState()
     LaunchedEffect(needle, filter, phrasesOnly) { listState.scrollToItem(0) }
 
+    // The keyboard covers the navigation bar; only lift the search field by the rest.
+    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val lift = (imeBottom - bottomInset).coerceAtLeast(0.dp)
+
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 20.dp)) {
-            Text("Rječnik", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 12.dp))
-            Spacer(Modifier.height(12.dp))
+        Text(
+            "Rječnik",
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 4.dp)
+        )
+        if (list.isEmpty()) {
+            Text(
+                "Nema rezultata.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = cs.onSurfaceVariant,
+                modifier = Modifier.padding(20.dp)
+            )
+        }
+        LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth()) {
+            items(list, key = { it.rank }) { w ->
+                WordRow(w, state.cards[w.rank].bucket()) { openRank = w.rank }
+                HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(start = 64.dp))
+            }
+        }
+
+        // Filters and search at the bottom, within thumb reach (like a bottom address bar).
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(cs.surfaceContainerLow)
+                .padding(bottom = lift)
+        ) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (state.phrases.isNotEmpty()) {
+                    item {
+                        FilterChip(
+                            selected = phrasesOnly,
+                            onClick = { phrasesOnly = !phrasesOnly },
+                            label = { Text("Fraze ${state.phrases.size}") }
+                        )
+                    }
+                }
+                items(Bucket.entries) { b ->
+                    FilterChip(
+                        selected = filter == b,
+                        onClick = { filter = b },
+                        label = { Text(if (phrasesOnly) b.label else "${b.label} ${state.count(b)}") },
+                        leadingIcon = if (b != Bucket.ALL) {
+                            { StatusDot(b) }
+                        } else null
+                    )
+                }
+            }
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
                 placeholder = { Text("Traži njemački ili hrvatski") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
@@ -94,44 +151,6 @@ fun DictionaryTab(vm: AppViewModel, state: UiState) {
                 singleLine = true,
                 shape = MaterialTheme.shapes.large
             )
-        }
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (state.phrases.isNotEmpty()) {
-                item {
-                    FilterChip(
-                        selected = phrasesOnly,
-                        onClick = { phrasesOnly = !phrasesOnly },
-                        label = { Text("Fraze ${state.phrases.size}") }
-                    )
-                }
-            }
-            items(Bucket.entries) { b ->
-                FilterChip(
-                    selected = filter == b,
-                    onClick = { filter = b },
-                    label = { Text(if (phrasesOnly) b.label else "${b.label} ${state.count(b)}") },
-                    leadingIcon = if (b != Bucket.ALL) {
-                        { StatusDot(b) }
-                    } else null
-                )
-            }
-        }
-        if (list.isEmpty()) {
-            Text(
-                "Nema rezultata.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = cs.onSurfaceVariant,
-                modifier = Modifier.padding(20.dp)
-            )
-        }
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-            items(list, key = { it.rank }) { w ->
-                WordRow(w, state.cards[w.rank].bucket()) { openRank = w.rank }
-                HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(start = 64.dp))
-            }
         }
     }
 

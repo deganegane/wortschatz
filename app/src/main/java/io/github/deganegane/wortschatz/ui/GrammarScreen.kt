@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import io.github.deganegane.wortschatz.AppViewModel
 import io.github.deganegane.wortschatz.BLANK
@@ -152,16 +153,19 @@ fun GrammarScreen(vm: AppViewModel, state: UiState) {
                                     }
                                 }
                             }
-                            Spacer(Modifier.height(12.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                SpeakButton(onClick = { vm.speak(word.example) }, size = 40.dp)
-                            }
                         }
                     }
                 }
             }
 
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                ActionBar {
+                    ActionItem(painterResource(io.github.deganegane.wortschatz.R.drawable.ic_close), "Završi") { vm.closeGrammar() }
+                    ActionItem(painterResource(io.github.deganegane.wortschatz.R.drawable.ic_volume), "Poslušaj", enabled = answered) {
+                        vm.speak(word.example)
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
                 if (!answered) {
                     gap.options.chunked(2).forEach { row ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

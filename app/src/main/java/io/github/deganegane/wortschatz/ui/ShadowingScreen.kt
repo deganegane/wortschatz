@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.deganegane.wortschatz.AppViewModel
+import io.github.deganegane.wortschatz.R
+import androidx.compose.ui.res.painterResource
 import io.github.deganegane.wortschatz.UiState
 import io.github.deganegane.wortschatz.plural
 import kotlinx.coroutines.delay
@@ -132,11 +134,6 @@ fun ShadowingScreen(vm: AppViewModel, state: UiState) {
                             color = cs.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
-                        Spacer(Modifier.height(16.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { vm.speak(word.example) }) { Text("Poslušaj") }
-                            OutlinedButton(onClick = { vm.speakSlow(word.example) }) { Text("Sporije") }
-                        }
                         if (match != null) {
                             Spacer(Modifier.height(16.dp))
                             val pct = if (match.isEmpty()) 0 else match.count { it } * 100 / match.size
@@ -163,8 +160,14 @@ fun ShadowingScreen(vm: AppViewModel, state: UiState) {
                 }
             }
 
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                if (vm.recognitionAvailable) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                ActionBar {
+                    ActionItem(painterResource(R.drawable.ic_close), "Završi") { vm.closeShadowing() }
+                    ActionItem(painterResource(R.drawable.ic_volume), "Poslušaj") { vm.speak(word.example) }
+                    ActionItem(painterResource(R.drawable.ic_slow), "Sporije") { vm.speakSlow(word.example) }
+                }
+                Spacer(Modifier.height(4.dp))
+                if (vm.recognitionAvailable && !state.settings.quiet) {
                     val start = rememberMicStarter(onStart = vm::listen, onDenied = vm::micDenied)
                     MicRow(
                         listen = state.listen,
@@ -179,7 +182,8 @@ fun ShadowingScreen(vm: AppViewModel, state: UiState) {
                     }
                 } else {
                     Text(
-                        "Prepoznavanje govora nije dostupno, pa ponavljaj sam i idi dalje kad zvuči kao original.",
+                        if (state.settings.quiet) "Tihi način: ponovi rečenicu šapatom ili u sebi, pa idi dalje."
+                        else "Prepoznavanje govora nije dostupno, pa ponavljaj sam i idi dalje kad zvuči kao original.",
                         style = MaterialTheme.typography.bodySmall,
                         color = cs.onSurfaceVariant
                     )
