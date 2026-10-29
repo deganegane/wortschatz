@@ -129,6 +129,26 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
                     if (vm.recognitionAvailable) "Mikrofon provjerava izgovorenu riječ i član" else "Prepoznavanje govora nije dostupno na ovom mobitelu",
                     s.speakAnswers
                 ) { v -> vm.updateSettings { it.copy(speakAnswers = v) } }
+                ToggleRow(
+                    "Ponovi nove riječi naglas",
+                    "Kad čuješ novu riječ, mikrofon se sam uključi da je ponoviš",
+                    s.repeatNew
+                ) { v -> vm.updateSettings { it.copy(repeatNew = v) } }
+                ToggleRow(
+                    "Uvijek ponovi naglas",
+                    "Isto i na svakoj kartici prepoznavanja nakon što vidiš odgovor (sporije, ali bolje pamtiš)",
+                    s.repeatAll
+                ) { v -> vm.updateSettings { it.copy(repeatAll = v) } }
+                ToggleRow(
+                    "Tihi način",
+                    "Bez mikrofona, npr. u tramvaju ili na poslu: govorne kartice otkrivaš dodirom",
+                    s.quiet
+                ) { v -> vm.updateSettings { it.copy(quiet = v) } }
+                ToggleRow(
+                    "Provjera u testu razine",
+                    "Otprilike svaki deseti \"znam\" traži da odabereš točno značenje",
+                    s.verifyKnown
+                ) { v -> vm.updateSettings { it.copy(verifyKnown = v) } }
             }
 
             Group("Izgovor") {

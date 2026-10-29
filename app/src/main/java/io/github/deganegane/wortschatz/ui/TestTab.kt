@@ -1,15 +1,12 @@
 package io.github.deganegane.wortschatz.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,34 +30,40 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.deganegane.wortschatz.AppViewModel
 import io.github.deganegane.wortschatz.Bucket
 import io.github.deganegane.wortschatz.R
+import io.github.deganegane.wortschatz.TestVerify
 import io.github.deganegane.wortschatz.UiState
+import io.github.deganegane.wortschatz.Word
 import io.github.deganegane.wortschatz.spoken
-import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 @Composable
 fun TestTab(vm: AppViewModel, state: UiState, onStartLearning: () -> Unit) {
     val cs = MaterialTheme.colorScheme
+    val a = LocalArticles.current
     val total = state.vocab.size
     val rank = state.nextTestRank
+    val verify = state.testVerify?.takeIf { it.rank == rank }
+    val swipe = rememberSwipeState()
 
+    Box(
+        Modifier
+            .fillMaxSize()
+            // The whole screen is the swipe area, so the thumb can stay at the bottom.
+            .swipeArea(swipe, enabled = rank != null && verify == null, key = rank) { right ->
+                rank?.let { vm.testAnswer(it, right) }
+            }
+    ) {
     Column(
         Modifier
             .fillMaxSize()
@@ -76,7 +79,7 @@ fun TestTab(vm: AppViewModel, state: UiState, onStartLearning: () -> Unit) {
                     color = cs.onSurfaceVariant
                 )
             }
-            IconButton(onClick = { vm.testUndo() }, enabled = state.testUndo.isNotEmpty()) {
+            IconButton(onClick = { vm.testUndo() }, enabled = state.testUndo.isNotEmpty() && verify == null) {
                 Icon(painterResource(R.drawable.ic_undo), contentDescription = "Poništi")
             }
         }
@@ -119,141 +122,136 @@ fun TestTab(vm: AppViewModel, state: UiState, onStartLearning: () -> Unit) {
         if (state.tested == 0) {
             Text(
                 "Znaš li ovu riječ? Budi iskren: \"znam\" znači da je razumiješ bez razmišljanja. " +
-                    "Povuci karticu udesno (znam) ili ulijevo (ne znam), ili dodirni za prijevod.",
+                    "Povuci bilo gdje na ekranu udesno (znam) ili ulijevo (ne znam), ili dodirni karticu za prijevod.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = cs.onSurfaceVariant
             )
             Spacer(Modifier.height(16.dp))
         }
 
-        SwipeCard(
-            key = rank,
-            onSwipe = { known -> vm.testAnswer(rank, known) }
-        ) { tint ->
-            Card(
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh),
-                modifier = Modifier.fillMaxWidth().clickable { revealed = !revealed }
-            ) {
-                Box {
-                    Column(
-                        Modifier.fillMaxWidth().padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Pill("#${word.rank}", cs.surfaceContainerHighest, cs.onSurfaceVariant)
-                            Spacer(Modifier.weight(1f))
-                            SpeakButton(onClick = { vm.speak(word.spoken()) })
-                        }
-                        Spacer(Modifier.height(24.dp))
-                        Headword(word, MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(8.dp))
-                        GrammarLine(word, center = true)
-                        Spacer(Modifier.height(24.dp))
-                        AnimatedVisibility(visible = revealed, enter = fadeIn() + expandVertically()) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    word.hr,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = cs.primary,
-                                    textAlign = TextAlign.Center
-                                )
-                                Spacer(Modifier.height(16.dp))
-                                ExampleBlock(word, onSpeak = vm::speak)
-                            }
-                        }
-                        if (!revealed) {
+        if (verify != null) {
+            VerifyCard(vm, word, verify)
+            Spacer(Modifier.height(32.dp))
+            return@Column
+        }
+
+        Card(
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh),
+            modifier = Modifier
+                .fillMaxWidth()
+                .swipeCard(swipe)
+                .clickable { revealed = !revealed }
+        ) {
+            Box {
+                Column(
+                    Modifier.fillMaxWidth().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Pill("#${word.rank}", cs.surfaceContainerHighest, cs.onSurfaceVariant)
+                        Spacer(Modifier.weight(1f))
+                        SpeakButton(onClick = { vm.speak(word.spoken()) })
+                    }
+                    Spacer(Modifier.height(24.dp))
+                    Headword(word, MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(8.dp))
+                    GrammarLine(word, center = true)
+                    Spacer(Modifier.height(24.dp))
+                    AnimatedVisibility(visible = revealed, enter = fadeIn() + expandVertically()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                "dodirni za prijevod",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = cs.onSurfaceVariant.copy(alpha = 0.7f)
+                                word.hr,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = cs.primary,
+                                textAlign = TextAlign.Center
                             )
+                            Spacer(Modifier.height(16.dp))
+                            ExampleBlock(word, onSpeak = vm::speak)
                         }
                     }
-                    tint()
+                    if (!revealed) {
+                        Text(
+                            "dodirni za prijevod",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = cs.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
                 }
+                SwipeHint(swipe, left = "NE ZNAM" to a.bad, right = "ZNAM" to a.good)
             }
         }
 
         Spacer(Modifier.height(20.dp))
-        val a = LocalArticles.current
+        Text(
+            "← ne znam  ·  povuci bilo gdje  ·  znam →",
+            style = MaterialTheme.typography.labelMedium,
+            color = cs.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
                 onClick = { vm.testAnswer(rank, false) },
-                modifier = Modifier.weight(1f).height(56.dp),
+                modifier = Modifier.weight(1f).height(44.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = a.bad)
-            ) { Text("Ne znam", style = MaterialTheme.typography.titleMedium) }
-            Button(
+            ) { Text("Ne znam") }
+            OutlinedButton(
                 onClick = { vm.testAnswer(rank, true) },
-                modifier = Modifier.weight(1f).height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = a.good, contentColor = cs.surface)
-            ) { Text("Znam", style = MaterialTheme.typography.titleMedium) }
+                modifier = Modifier.weight(1f).height(44.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = a.good)
+            ) { Text("Znam") }
         }
         Spacer(Modifier.height(32.dp))
     }
+    }
 }
 
-/**
- * Horizontal swipe: right = known, left = not known. The content receives an overlay that
- * shows the coloured hint while dragging (draw it last inside the card's Box).
- */
+/** Double-check of a "znam": which of four meanings is right? */
 @Composable
-private fun SwipeCard(
-    key: Any,
-    onSwipe: (known: Boolean) -> Unit,
-    content: @Composable (overlay: @Composable BoxScope.() -> Unit) -> Unit
-) {
-    val offset = remember(key) { Animatable(0f) }
-    val scope = rememberCoroutineScope()
-    var width by remember { mutableFloatStateOf(1f) }
+private fun VerifyCard(vm: AppViewModel, word: Word, v: TestVerify) {
+    val cs = MaterialTheme.colorScheme
     val a = LocalArticles.current
-
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
-            .graphicsLayer {
-                translationX = offset.value
-                rotationZ = offset.value / width * 8f
-            }
-            .pointerInput(key) {
-                detectHorizontalDragGestures(
-                    onDragEnd = {
-                        scope.launch {
-                            val threshold = width * 0.28f
-                            if (abs(offset.value) > threshold) {
-                                val known = offset.value > 0
-                                offset.animateTo(if (known) width * 1.4f else -width * 1.4f)
-                                onSwipe(known)
-                            } else {
-                                offset.animateTo(0f)
-                            }
-                        }
-                    },
-                    onDragCancel = { scope.launch { offset.animateTo(0f) } }
-                ) { change, drag ->
-                    change.consume()
-                    scope.launch { offset.snapTo(offset.value + drag) }
-                }
-            }
+    Card(
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
     ) {
-        content {
-            val p = (offset.value / (width * 0.28f)).coerceIn(-1f, 1f)
-            if (p != 0f) {
-                val color = if (p > 0) a.good else a.bad
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .background(color.copy(alpha = abs(p) * 0.22f))
-                )
+        Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Pill("PROVJERA", cs.tertiaryContainer, cs.onTertiaryContainer)
+            Spacer(Modifier.height(16.dp))
+            Headword(word, MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(8.dp))
+            Text("Rekao si da znaš. Što znači?", style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+            Spacer(Modifier.height(16.dp))
+            v.options.forEachIndexed { i, opt ->
+                val answered = v.chosen != null
+                val tint = when {
+                    !answered -> cs.onSurface
+                    i == v.correct -> a.good
+                    i == v.chosen -> a.bad
+                    else -> cs.onSurfaceVariant
+                }
+                OutlinedButton(
+                    onClick = { vm.verifyChoose(i) },
+                    enabled = !answered,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    border = BorderStroke(if (answered && (i == v.correct || i == v.chosen)) 2.dp else 1.dp, tint.copy(alpha = if (answered) 1f else 0.4f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = tint, disabledContentColor = tint)
+                ) { Text(opt, textAlign = TextAlign.Center) }
+            }
+            if (v.chosen != null) {
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    if (p > 0) "ZNAM" else "NE ZNAM",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = color.copy(alpha = abs(p)),
-                    modifier = Modifier
-                        .align(if (p > 0) Alignment.BottomStart else Alignment.BottomEnd)
-                        .padding(24.dp)
+                    if (v.passed) "Točno — stvarno je znaš." else "Ipak ne — riječ ide u učenje.",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (v.passed) a.good else a.bad
                 )
+                if (!v.passed) {
+                    Text(word.hr, style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant, textAlign = TextAlign.Center)
+                }
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = { vm.verifyContinue() }, modifier = Modifier.fillMaxWidth()) { Text("Dalje") }
             }
         }
     }

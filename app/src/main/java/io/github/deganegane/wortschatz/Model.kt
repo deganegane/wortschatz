@@ -104,6 +104,17 @@ data class Story(
     val wordCount: Int get() = de.split(Regex("\\s+")).count { it.any(Char::isLetter) }
 }
 
+/** A "znam" in the level test being double-checked: pick the right meaning of four. */
+data class TestVerify(
+    val rank: Int,
+    val options: List<String>,
+    val correct: Int,
+    /** Index chosen, null until answered. */
+    val chosen: Int? = null
+) {
+    val passed: Boolean get() = chosen == correct
+}
+
 /** One grammar-gap round: ten sentences answered by tapping an option. */
 data class GrammarRound(
     val ranks: List<Int>,
@@ -193,8 +204,19 @@ data class Settings(
     /** Mix ready-made conversational phrases into the new cards. */
     val phrasesOn: Boolean = true,
     /** Name of the TTS voice to use; null = best offline German voice. */
-    val voiceName: String? = null
-)
+    val voiceName: String? = null,
+    /** After hearing a new word, the microphone turns on so you repeat it. */
+    val repeatNew: Boolean = true,
+    /** The same on every recognition card once the answer is shown. */
+    val repeatAll: Boolean = false,
+    /** Never use the microphone (public places): speaking cards are answered by revealing. */
+    val quiet: Boolean = false,
+    /** In the level test, confirm about every tenth "znam" with a multiple-choice meaning. */
+    val verifyKnown: Boolean = true
+) {
+    /** Microphone answers on speaking cards. */
+    val micAnswers: Boolean get() = speakAnswers && !quiet
+}
 
 /** Activity of one calendar day. */
 data class DayStat(
@@ -221,6 +243,8 @@ data class Session(
     val revealed: Boolean = false,
     /** Result of a spoken answer on the current card, if any. */
     val check: SpokenCheck? = null,
+    /** Result of repeating the word aloud after it was shown (doesn't affect the grade). */
+    val repeat: SpokenCheck? = null,
     val reviewed: Int = 0,
     val again: Int = 0,
     val newSeen: Int = 0,

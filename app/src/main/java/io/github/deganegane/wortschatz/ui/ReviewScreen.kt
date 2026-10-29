@@ -1,6 +1,15 @@
 package io.github.deganegane.wortschatz.ui
 
 import androidx.activity.compose.BackHandler
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
@@ -68,12 +77,19 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
     val cs = MaterialTheme.colorScheme
     BackHandler { vm.closeSession() }
 
+    val swipe = rememberSwipeState()
+    val swipeKey = session.current to session.reviewed
+    val swipeOn = session.current != null && (session.revealed || session.current?.isNew == true)
     Surface(Modifier.fillMaxSize(), color = cs.background) {
         Column(
             Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
+                // Once the answer is shown: swipe anywhere on the screen — left "Opet", right "Dobro".
+                .swipeArea(swipe, enabled = swipeOn, key = swipeKey) { right ->
+                    vm.answer(if (right) Grade.GOOD else Grade.AGAIN)
+                }
         ) {
             // Top bar: close + progress
             val left = session.queue.size
@@ -107,9 +123,19 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
             // New words are shown with their meaning straight away.
             val revealed = session.revealed || item.isNew
             val speaking = item.mode != Mode.RECOGNIZE && !item.isNew
-            val useMic = speaking && state.settings.speakAnswers && vm.recognitionAvailable
+            val useMic = speaking && state.settings.micAnswers && vm.recognitionAvailable
+            val context = LocalContext.current
+            val micGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            // Repeat aloud: recognition cards once the answer is shown (new words, or all if chosen).
+            val canRepeat = !speaking && !state.settings.quiet && vm.recognitionAvailable
+            val autoRepeat = canRepeat && revealed && micGranted &&
+                ((item.isNew && state.settings.repeatNew) || state.settings.repeatAll)
 
             LaunchedEffect(item.rank, session.reviewed, revealed) {
+                if (autoRepeat) {
+                    vm.speakThenRepeat(word.spoken())
+                    return@LaunchedEffect
+                }
                 if (!state.settings.autoSpeak) return@LaunchedEffect
                 when {
                     !speaking -> vm.speak(word.spoken())
@@ -139,7 +165,8 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
                         word = w,
                         revealed = if (current) revealed else true,
                         check = if (current) session.check else null,
-                        isCurrent = current
+                        isCurrent = current,
+                        swipe = swipe
                     )
                 }
             }
@@ -147,11 +174,25 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
             // Bottom: microphone, reveal, or grade
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                 when {
-                    revealed -> GradeButtons(
-                        onGrade = vm::answer,
-                        preview = Srs.preview(state.cards[item.rank], state.today, state.settings.retention),
-                        suggested = session.check?.suggested
-                    )
+                    revealed -> {
+                        if (canRepeat) {
+                            val start = rememberMicStarter(onStart = vm::listen, onDenied = vm::micDenied)
+                            RepeatRow(state.listen, session.repeat, word, onStart = start, onStop = vm::finishListening)
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        Text(
+                            "← Opet  ·  povuci bilo gdje  ·  Dobro →",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = cs.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                        )
+                        GradeButtons(
+                            onGrade = vm::answer,
+                            preview = Srs.preview(state.cards[item.rank], state.today, state.settings.retention),
+                            suggested = session.check?.suggested
+                        )
+                    }
                     useMic -> {
                         val start = rememberMicStarter(onStart = vm::listen, onDenied = vm::micDenied)
                         MicRow(
@@ -179,15 +220,21 @@ private fun ColumnScope.CardFace(
     word: Word,
     revealed: Boolean,
     check: SpokenCheck?,
-    isCurrent: Boolean
+    isCurrent: Boolean,
+    swipe: SwipeState
 ) {
     val cs = MaterialTheme.colorScheme
+    val a = LocalArticles.current
     val mode = if (item.isNew) Mode.RECOGNIZE else item.mode
     Card(
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh),
-        modifier = Modifier.fillMaxWidth().clickable(enabled = !revealed && mode == Mode.RECOGNIZE) { vm.reveal() }
+        modifier = Modifier
+            .fillMaxWidth()
+            .swipeCard(swipe, current = isCurrent)
+            .clickable(enabled = !revealed && mode == Mode.RECOGNIZE) { vm.reveal() }
     ) {
+        Box {
         Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 when {
@@ -290,6 +337,8 @@ private fun ColumnScope.CardFace(
                     }
                 }
             }
+        }
+        if (isCurrent) SwipeHint(swipe, left = "OPET" to a.bad, right = "DOBRO" to a.good)
         }
     }
 
@@ -402,5 +451,45 @@ private fun SummaryStat(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, style = MaterialTheme.typography.headlineMedium)
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** "Ponovi naglas": small microphone row under a shown answer; doesn't change the grade. */
+@Composable
+private fun RepeatRow(
+    listen: io.github.deganegane.wortschatz.ListenState,
+    result: SpokenCheck?,
+    word: Word,
+    onStart: () -> Unit,
+    onStop: () -> Unit
+) {
+    val cs = MaterialTheme.colorScheme
+    val a = LocalArticles.current
+    val listening = listen.phase == io.github.deganegane.wortschatz.ListenPhase.LISTENING
+    val (text, color) = when {
+        listening -> (if (listen.partial.isBlank()) "Ponovi naglas…" else "„${listen.partial}“") to cs.primary
+        result?.verdict == io.github.deganegane.wortschatz.Verdict.CORRECT -> "Dobro izgovoreno!" to a.good
+        result?.verdict == io.github.deganegane.wortschatz.Verdict.ALMOST ->
+            (if (word.article != null) "Skoro — reci i član: ${word.full}" else "Skoro — probaj još jednom") to cs.primary
+        result != null -> (if (result.heard.isBlank()) "Nisam ništa čuo" else "Čuo sam „${result.heard}“ — probaj još jednom") to a.bad
+        listen.phase == io.github.deganegane.wortschatz.ListenPhase.ERROR -> (listen.error ?: "Nešto je pošlo krivo.") to cs.error
+        else -> "Ponovi riječ naglas" to cs.onSurfaceVariant
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(cs.surfaceContainer)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FilledTonalIconButton(onClick = { if (listening) onStop() else onStart() }) {
+            Icon(
+                painterResource(if (listening) io.github.deganegane.wortschatz.R.drawable.ic_stop else io.github.deganegane.wortschatz.R.drawable.ic_mic),
+                contentDescription = if (listening) "Gotovo" else "Ponovi naglas"
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = color, modifier = Modifier.weight(1f))
     }
 }

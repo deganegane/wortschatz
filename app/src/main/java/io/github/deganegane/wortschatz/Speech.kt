@@ -1,7 +1,10 @@
 package io.github.deganegane.wortschatz
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import java.util.Locale
 
@@ -23,6 +26,11 @@ class Speech(context: Context, private val onState: (VoiceState) -> Unit) {
     var currentVoice: String? = null
         private set
 
+    private val main = Handler(Looper.getMainLooper())
+    private var counter = 0
+    /** Utterance id → what to run (on the main thread) once it has been spoken. */
+    private val pendingDone = HashMap<String, () -> Unit>()
+
     init {
         tts = TextToSpeech(context.applicationContext) { status ->
             val engine = tts
@@ -34,6 +42,17 @@ class Speech(context: Context, private val onState: (VoiceState) -> Unit) {
                     VoiceState.NO_GERMAN
                 } else {
                     voices = listVoices(engine)
+                    engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {}
+                        override fun onDone(utteranceId: String?) = finish(utteranceId)
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(utteranceId: String?) = finish(utteranceId)
+                        override fun onError(utteranceId: String?, errorCode: Int) = finish(utteranceId)
+                        override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                            // Interrupted (another card, the microphone…): drop the follow-up.
+                            main.post { pendingDone.remove(utteranceId) }
+                        }
+                    })
                     VoiceState.READY
                 }
             }
@@ -89,14 +108,26 @@ class Speech(context: Context, private val onState: (VoiceState) -> Unit) {
         if (engine.setVoice(voice) == TextToSpeech.SUCCESS) currentVoice = pick.name
     }
 
-    fun speak(text: String, slow: Boolean) {
-        val engine = tts ?: return
-        if (state != VoiceState.READY || text.isBlank()) return
+    private fun finish(id: String?) {
+        main.post { pendingDone.remove(id)?.invoke() }
+    }
+
+    /** Speaks [text]; [onDone] runs on the main thread when it finished (not if interrupted). */
+    fun speak(text: String, slow: Boolean, onDone: (() -> Unit)? = null) {
+        val engine = tts
+        if (engine == null || state != VoiceState.READY || text.isBlank()) {
+            onDone?.let { main.post(it) }
+            return
+        }
+        pendingDone.clear()
+        val id = "w${++counter}"
+        if (onDone != null) pendingDone[id] = onDone
         engine.setSpeechRate(if (slow) 0.7f else 0.95f)
-        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "wortschatz")
+        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
     }
 
     fun stop() {
+        pendingDone.clear()
         tts?.stop()
     }
 

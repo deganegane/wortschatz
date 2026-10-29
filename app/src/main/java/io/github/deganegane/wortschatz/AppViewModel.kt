@@ -22,6 +22,8 @@ data class UiState(
     val session: Session? = null,
     val shadowing: Shadowing? = null,
     val grammar: GrammarRound? = null,
+    /** A "znam" from the level test waiting for confirmation. */
+    val testVerify: TestVerify? = null,
     val stories: List<Story> = emptyList(),
     val readIds: Set<String> = emptySet(),
     val listen: ListenState = ListenState(),
@@ -116,7 +118,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var forms: Map<String, Int>? = null
     private var formsLoading = false
 
-    private enum class ListenFor { REVIEW, SHADOW }
+    private enum class ListenFor { REVIEW, REPEAT, SHADOW }
     private var listenFor = ListenFor.REVIEW
 
     private val listener = Listener(
@@ -170,11 +172,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Listening --------------------------------------------------------
 
     fun listen() {
+        val s = _state.value
+        val target = when {
+            s.shadowing != null && s.session == null -> ListenFor.SHADOW
+            // Once the answer is shown, the microphone is for repeating it aloud.
+            s.session?.let { it.revealed || it.current?.isNew == true } == true -> ListenFor.REPEAT
+            else -> ListenFor.REVIEW
+        }
+        startListening(target)
+    }
+
+    private fun startListening(target: ListenFor) {
         if (_state.value.listen.phase == ListenPhase.LISTENING) return
         speech.stop()
-        listenFor = if (_state.value.shadowing != null && _state.value.session == null) ListenFor.SHADOW else ListenFor.REVIEW
-        _state.update { it.copy(listen = ListenState(ListenPhase.LISTENING)) }
+        listenFor = target
+        _state.update { st ->
+            st.copy(
+                listen = ListenState(ListenPhase.LISTENING),
+                session = if (target == ListenFor.REPEAT) st.session?.copy(repeat = null) else st.session
+            )
+        }
         listener.start()
+    }
+
+    /**
+     * Plays the word, then turns the microphone on so it can be repeated aloud. Skipped if the
+     * card has changed by the time the word has been spoken.
+     */
+    fun speakThenRepeat(text: String) {
+        val s = _state.value
+        val token = s.session?.let { it.current?.rank to it.reviewed } ?: return
+        val go = {
+            val now = _state.value.session
+            if (now != null && (now.current?.rank to now.reviewed) == token && now.repeat == null) {
+                startListening(ListenFor.REPEAT)
+            }
+        }
+        if (s.settings.autoSpeak) speech.speak(text, s.settings.slowSpeech, onDone = go) else go()
     }
 
     fun micDenied() {
@@ -209,6 +243,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 if (s.settings.autoSpeak) speak(if (item.mode == Mode.CLOZE) word.example else word.spoken())
+            }
+            ListenFor.REPEAT -> {
+                val session = s.session ?: return
+                val item = session.current ?: return
+                val word = s.word(item.rank) ?: return
+                _state.update {
+                    it.copy(
+                        listen = ListenState(ListenPhase.DONE),
+                        session = session.copy(repeat = SpeechCheck.checkWord(word, results))
+                    )
+                }
             }
             ListenFor.SHADOW -> {
                 val sh = s.shadowing ?: return
@@ -269,6 +314,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             queue = rest,
             revealed = false,
             check = null,
+            repeat = null,
             reviewed = session.reviewed + 1,
             again = session.again + if (grade == Grade.AGAIN) 1 else 0,
             newSeen = session.newSeen + if (wasNew) 1 else 0
@@ -295,6 +341,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     queue = rest,
                     revealed = false,
                     check = null,
+                    repeat = null,
                     plannedTotal = session.plannedTotal - dropped
                 )
             )
@@ -344,7 +391,53 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Placement test ---------------------------------------------------
 
     /** [rank] guards against a double answer (button tap during the swipe animation). */
+    /** "znam" answers since the last double-check. */
+    private var knownSinceVerify = 0
+
     fun testAnswer(rank: Int, known: Boolean) {
+        val s = _state.value
+        if (s.nextTestRank != rank || s.testVerify != null) return
+        if (known && s.settings.verifyKnown) {
+            knownSinceVerify++
+            if (knownSinceVerify >= 10) {
+                val v = makeVerify(s, rank)
+                if (v != null) {
+                    knownSinceVerify = 0
+                    _state.update { it.copy(testVerify = v) }
+                    return
+                }
+            }
+        }
+        commitTest(rank, known)
+    }
+
+    /** Four Croatian meanings: the right one plus three of words of the same kind. */
+    private fun makeVerify(s: UiState, rank: Int): TestVerify? {
+        val word = s.word(rank) ?: return null
+        val right = word.hrShort
+        val pool = s.vocab.filter { it.rank != rank && it.pos == word.pos && it.hrShort.isNotBlank() && it.hrShort != right }
+            .ifEmpty { s.vocab.filter { it.rank != rank && it.hrShort != right } }
+        val wrong = pool.shuffled().map { it.hrShort }.distinct().take(3)
+        if (wrong.size < 3) return null
+        val options = (wrong + right).shuffled()
+        return TestVerify(rank, options, options.indexOf(right))
+    }
+
+    fun verifyChoose(index: Int) {
+        val v = _state.value.testVerify ?: return
+        if (v.chosen != null) return
+        _state.update { it.copy(testVerify = v.copy(chosen = index)) }
+    }
+
+    /** After the double-check: right → known, wrong → into learning. */
+    fun verifyContinue() {
+        val v = _state.value.testVerify ?: return
+        if (v.chosen == null) return
+        _state.update { it.copy(testVerify = null) }
+        commitTest(v.rank, known = v.passed)
+    }
+
+    private fun commitTest(rank: Int, known: Boolean) {
         val s = _state.value
         if (s.nextTestRank != rank) return
         val prev = s.cards[rank]

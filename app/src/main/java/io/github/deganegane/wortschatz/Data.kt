@@ -110,7 +110,11 @@ class Store(ctx: Context) {
         dynamicColor = prefs.getBoolean("dynamicColor", false),
         level = prefs.getInt("level", 1).coerceAtLeast(1),
         phrasesOn = prefs.getBoolean("phrasesOn", true),
-        voiceName = prefs.getString("voiceName", null)
+        voiceName = prefs.getString("voiceName", null),
+        repeatNew = prefs.getBoolean("repeatNew", true),
+        repeatAll = prefs.getBoolean("repeatAll", false),
+        quiet = prefs.getBoolean("quiet", false),
+        verifyKnown = prefs.getBoolean("verifyKnown", true)
     )
 
     fun saveSettings(s: Settings) {
@@ -129,6 +133,10 @@ class Store(ctx: Context) {
             .putInt("level", s.level)
             .putBoolean("phrasesOn", s.phrasesOn)
             .putString("voiceName", s.voiceName)
+            .putBoolean("repeatNew", s.repeatNew)
+            .putBoolean("repeatAll", s.repeatAll)
+            .putBoolean("quiet", s.quiet)
+            .putBoolean("verifyKnown", s.verifyKnown)
             .apply()
     }
 
