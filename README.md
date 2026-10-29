@@ -33,6 +33,23 @@ APK preuzmi na mobitel iz **Releases** (`Wortschatz.apk`) i instaliraj.
 Svi buildovi su potpisani istim ključem (`keystore/`), pa se nova verzija instalira preko
 stare i napredak ostaje.
 
+## Web verzija (iPhone)
+
+Ista aplikacija kao web stranica u `web/` (Preact + htm, bez build koraka), za iPhone i ostale
+preglednike. Na iPhoneu: otvori adresu u Safariju → **Dijeli → Dodaj na početni zaslon**; tada
+radi kao aplikacija, i bez interneta (osim prepoznavanja govora).
+
+- Logika je prenesena 1:1 (`js/srs.js` = FSRS, `js/speechcheck.js` = provjera govora,
+  `js/app-state.js` = AppViewModel); podaci su isti `assets/*.json`.
+- Napredak se čuva u pregledniku (localStorage, isti JSON format kao na Androidu).
+  Postavke → **Sigurnosna kopija** sprema i vraća napredak kao datoteku.
+- Izgovor: glasovi sustava (`speechSynthesis`); prepoznavanje govora: Web Speech API
+  (na iPhoneu Siri diktiranje). Dnevnog podsjetnika nema.
+- Objava: workflow **Web (Cloudflare Pages)** na svaki push koji dira `web/` ili `assets/`.
+  Treba GitHub secrets `CLOUDFLARE_API_TOKEN` (dozvola *Cloudflare Pages: Edit*) i
+  `CLOUDFLARE_ACCOUNT_ID`; projekt `wortschatz-hr` se sam napravi pri prvoj objavi.
+- Lokalno: `mkdir -p web/data && cp app/src/main/assets/*.json web/data/ && cd web && python3 -m http.server`.
+
 ## Gdje je što
 
 | Datoteka | Sadržaj |

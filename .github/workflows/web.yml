@@ -1,0 +1,68 @@
+name: Web (Cloudflare Pages)
+
+on:
+  push:
+    branches: [ main, master ]
+    paths: [ 'web/**', 'app/src/main/assets/**', '.github/workflows/web.yml' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # Secrets can't be read in a step's `if`, so expose them at job level.
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CF_PROJECT: ${{ vars.CLOUDFLARE_PROJECT || 'wortschatz-hr' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          rm -rf dist
+          cp -r web dist
+          mkdir -p dist/data
+          cp app/src/main/assets/words.json app/src/main/assets/stories.json app/src/main/assets/forms.json dist/data/
+          # A new cache name on every deploy, so phones pick up the update.
+          sed -i "s/const VERSION = 'dev';/const VERSION = '${GITHUB_SHA::8}';/" dist/sw.js
+          grep -q "${GITHUB_SHA::8}" dist/sw.js
+          # Every file the service worker precaches must exist.
+          node -e "
+            const fs=require('fs');const src=fs.readFileSync('dist/sw.js','utf8');
+            const list=JSON.parse(src.match(/const FILES = (\[[\s\S]*?\]);/)[1].replace(/'/g,'\"').replace(/,\s*\]/,']'));
+            const missing=list.filter(f=>f!=='./'&&!fs.existsSync('dist/'+f));
+            if(missing.length){console.error('Missing:',missing);process.exit(1)}
+            console.log(list.length+' files ok');"
+          du -sh dist
+
+      - name: Upload site as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wortschatz-web
+          path: dist
+
+      - name: Create Pages project (first run only)
+        if: env.CF_TOKEN != '' && env.CF_ACCOUNT != ''
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create ${{ env.CF_PROJECT }} --production-branch=main
+
+      - name: Deploy to Cloudflare Pages
+        if: env.CF_TOKEN != '' && env.CF_ACCOUNT != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ env.CF_PROJECT }} --branch=main --commit-dirty=true
+
+      - name: No Cloudflare secrets yet
+        if: env.CF_TOKEN == '' || env.CF_ACCOUNT == ''
+        run: echo "::notice::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets to deploy. The site is in the artifact."

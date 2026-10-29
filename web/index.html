@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wortschatz</title>
+<meta name="description" content="Najčešćih 1000–4000 njemačkih riječi s ponavljanjem (FSRS), govorom, shadowingom, gramatikom i pričama.">
+<meta name="theme-color" content="#F6FAF9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B1719" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wortschatz">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preload" href="data/words.json" as="fetch" crossorigin>
+<link rel="stylesheet" href="css/app.css">
+<style>
+  /* Before the stylesheet arrives: the right background, no white flash. */
+  html { background: #F6FAF9; }
+  @media (prefers-color-scheme: dark) { html { background: #0B1719; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<noscript><p style="padding:24px;font-family:system-ui">Wortschatz treba JavaScript.</p></noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
