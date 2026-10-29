@@ -63,6 +63,7 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
     val cs = MaterialTheme.colorScheme
     val due = state.dueToday
     val fresh = state.newLeftToday
+    val pinned = due + fresh > 0 || state.newAvailable > 0
     Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
@@ -70,7 +71,7 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
             // Room for the start button pinned at the bottom.
-            .padding(bottom = 80.dp)
+            .padding(bottom = if (pinned) 80.dp else 0.dp)
     ) {
         // Header
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -168,7 +169,7 @@ fun TodayTab(vm: AppViewModel, state: UiState, onOpenTest: () -> Unit, onOpenSet
     }
 
     // The day's main action, pinned within thumb reach above the navigation bar.
-    Box(
+    if (pinned) Box(
         Modifier
             .align(Alignment.BottomCenter)
             .fillMaxWidth()

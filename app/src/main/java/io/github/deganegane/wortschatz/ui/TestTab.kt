@@ -122,7 +122,7 @@ fun TestTab(vm: AppViewModel, state: UiState, onStartLearning: () -> Unit) {
                 }
 
                 if (verify != null) {
-                    VerifyCard(word, verify, onChoose = vm::verifyChoose)
+                    VerifyCard(word, verify)
                     Spacer(Modifier.height(24.dp))
                     return@Column
                 }
@@ -168,20 +168,37 @@ fun TestTab(vm: AppViewModel, state: UiState, onStartLearning: () -> Unit) {
             // Everything you tap lives down here, within reach of the thumb.
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 when {
-                    rank == null || word == null -> Button(onClick = onStartLearning, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                        Text("Kreni učiti")
+                    rank == null || word == null -> {
+                        if (state.testUndo.isNotEmpty()) {
+                            ActionBar { ActionItem(painterResource(R.drawable.ic_undo), "Poništi") { vm.testUndo() } }
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        Button(onClick = onStartLearning, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Kreni učiti") }
                     }
                     verify != null -> {
+                        // The four meanings sit down here, within thumb reach.
+                        verify.options.forEachIndexed { i, opt ->
+                            val answered = verify.chosen != null
+                            val tint = when {
+                                !answered -> cs.onSurface
+                                i == verify.correct -> a.good
+                                i == verify.chosen -> a.bad
+                                else -> cs.onSurfaceVariant
+                            }
+                            OutlinedButton(
+                                onClick = { vm.verifyChoose(i) },
+                                enabled = !answered,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                border = BorderStroke(
+                                    if (answered && (i == verify.correct || i == verify.chosen)) 2.dp else 1.dp,
+                                    tint.copy(alpha = if (answered) 1f else 0.4f)
+                                ),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = tint, disabledContentColor = tint)
+                            ) { Text(opt, textAlign = TextAlign.Center) }
+                        }
                         if (verify.chosen != null) {
+                            Spacer(Modifier.height(6.dp))
                             Button(onClick = { vm.verifyContinue() }, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Dalje") }
-                        } else {
-                            Text(
-                                "Odaberi značenje iznad",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = cs.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)
-                            )
                         }
                     }
                     else -> {
@@ -214,7 +231,7 @@ fun TestTab(vm: AppViewModel, state: UiState, onStartLearning: () -> Unit) {
 
 /** Double-check of a "znam": which of four meanings is right? */
 @Composable
-private fun VerifyCard(word: Word, v: TestVerify, onChoose: (Int) -> Unit) {
+private fun VerifyCard(word: Word, v: TestVerify) {
     val cs = MaterialTheme.colorScheme
     val a = LocalArticles.current
     Card(
@@ -227,23 +244,6 @@ private fun VerifyCard(word: Word, v: TestVerify, onChoose: (Int) -> Unit) {
             Headword(word, MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center)
             Spacer(Modifier.height(8.dp))
             Text("Rekao si da znaš. Što znači?", style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
-            Spacer(Modifier.height(16.dp))
-            v.options.forEachIndexed { i, opt ->
-                val answered = v.chosen != null
-                val tint = when {
-                    !answered -> cs.onSurface
-                    i == v.correct -> a.good
-                    i == v.chosen -> a.bad
-                    else -> cs.onSurfaceVariant
-                }
-                OutlinedButton(
-                    onClick = { onChoose(i) },
-                    enabled = !answered,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    border = BorderStroke(if (answered && (i == v.correct || i == v.chosen)) 2.dp else 1.dp, tint.copy(alpha = if (answered) 1f else 0.4f)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = tint, disabledContentColor = tint)
-                ) { Text(opt, textAlign = TextAlign.Center) }
-            }
             if (v.chosen != null) {
                 Spacer(Modifier.height(12.dp))
                 Text(
