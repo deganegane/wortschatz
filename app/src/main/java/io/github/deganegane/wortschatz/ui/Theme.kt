@@ -30,63 +30,63 @@ import androidx.core.view.WindowCompat
 import io.github.deganegane.wortschatz.R
 import io.github.deganegane.wortschatz.ThemeMode
 
-/** "Word treasure": warm gold on deep ink, paper tones in light mode. */
-private val InkDark: ColorScheme = darkColorScheme(
-    primary = Color(0xFFF5BC4A),
-    onPrimary = Color(0xFF3A2600),
-    primaryContainer = Color(0xFF5A3F05),
-    onPrimaryContainer = Color(0xFFFFDEA6),
-    secondary = Color(0xFF9CC6FF),
-    onSecondary = Color(0xFF00315C),
-    secondaryContainer = Color(0xFF1D3657),
-    onSecondaryContainer = Color(0xFFD2E4FF),
-    tertiary = Color(0xFFFF9E8A),
-    onTertiary = Color(0xFF5A1406),
-    tertiaryContainer = Color(0xFF6B2A1C),
-    onTertiaryContainer = Color(0xFFFFDAD2),
-    background = Color(0xFF0E1320),
-    onBackground = Color(0xFFE9ECF4),
-    surface = Color(0xFF0E1320),
-    onSurface = Color(0xFFE9ECF4),
-    surfaceVariant = Color(0xFF1F2738),
-    onSurfaceVariant = Color(0xFFA7B0C4),
-    surfaceContainerLowest = Color(0xFF0A0E18),
-    surfaceContainerLow = Color(0xFF131929),
-    surfaceContainer = Color(0xFF171E2F),
-    surfaceContainerHigh = Color(0xFF1E2638),
-    surfaceContainerHighest = Color(0xFF263044),
-    outline = Color(0xFF3C4760),
-    outlineVariant = Color(0xFF283147),
+/** "Jadran": teal sea and warm sand; calm enough for daily study. */
+private val JadranDark: ColorScheme = darkColorScheme(
+    primary = Color(0xFF5ED6CF),
+    onPrimary = Color(0xFF00302E),
+    primaryContainer = Color(0xFF12403F),
+    onPrimaryContainer = Color(0xFFC9EFEA),
+    secondary = Color(0xFFFFC27A),
+    onSecondary = Color(0xFF432700),
+    secondaryContainer = Color(0xFF5A3A12),
+    onSecondaryContainer = Color(0xFFFFE3B3),
+    tertiary = Color(0xFF9CC2FF),
+    onTertiary = Color(0xFF00305F),
+    tertiaryContainer = Color(0xFF1D3F6B),
+    onTertiaryContainer = Color(0xFFD6E4FF),
+    background = Color(0xFF0B1719),
+    onBackground = Color(0xFFE4F2F0),
+    surface = Color(0xFF0B1719),
+    onSurface = Color(0xFFE4F2F0),
+    surfaceVariant = Color(0xFF1E3133),
+    onSurfaceVariant = Color(0xFF93ADAB),
+    surfaceContainerLowest = Color(0xFF081113),
+    surfaceContainerLow = Color(0xFF0F1E20),
+    surfaceContainer = Color(0xFF132326),
+    surfaceContainerHigh = Color(0xFF1A2C2F),
+    surfaceContainerHighest = Color(0xFF223639),
+    outline = Color(0xFF3B5457),
+    outlineVariant = Color(0xFF253A3C),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005)
 )
 
-private val InkLight: ColorScheme = lightColorScheme(
-    primary = Color(0xFF825800),
+private val JadranLight: ColorScheme = lightColorScheme(
+    primary = Color(0xFF0B8A86),
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFFFDEA6),
-    onPrimaryContainer = Color(0xFF2A1800),
-    secondary = Color(0xFF2B5C93),
+    primaryContainer = Color(0xFFCDEFEA),
+    onPrimaryContainer = Color(0xFF063B40),
+    secondary = Color(0xFF9A5B12),
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFD4E3FF),
-    onSecondaryContainer = Color(0xFF001C3A),
-    tertiary = Color(0xFFA23C28),
+    secondaryContainer = Color(0xFFFFE3B3),
+    onSecondaryContainer = Color(0xFF3A2200),
+    tertiary = Color(0xFF2B6CC4),
     onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFFFDAD2),
-    onTertiaryContainer = Color(0xFF3D0600),
-    background = Color(0xFFFBF7EF),
-    onBackground = Color(0xFF1B1C20),
-    surface = Color(0xFFFBF7EF),
-    onSurface = Color(0xFF1B1C20),
-    surfaceVariant = Color(0xFFEDE6D8),
-    onSurfaceVariant = Color(0xFF4D4639),
+    tertiaryContainer = Color(0xFFD6E4FF),
+    onTertiaryContainer = Color(0xFF0B2A5C),
+    background = Color(0xFFF6FAF9),
+    onBackground = Color(0xFF0F2226),
+    surface = Color(0xFFF6FAF9),
+    onSurface = Color(0xFF0F2226),
+    surfaceVariant = Color(0xFFDCE8E6),
+    onSurfaceVariant = Color(0xFF4D6468),
     surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF6F1E7),
-    surfaceContainer = Color(0xFFF1EBE0),
-    surfaceContainerHigh = Color(0xFFEBE5DA),
-    surfaceContainerHighest = Color(0xFFE5DFD4),
-    outline = Color(0xFF7F7667),
-    outlineVariant = Color(0xFFD1C5B4),
+    surfaceContainerLow = Color(0xFFF0F6F5),
+    surfaceContainer = Color(0xFFEAF2F1),
+    surfaceContainerHigh = Color(0xFFE4EDEC),
+    surfaceContainerHighest = Color(0xFFDEE8E7),
+    outline = Color(0xFF708A89),
+    outlineVariant = Color(0xFFC9DAD8),
     error = Color(0xFFBA1A1A),
     onError = Color(0xFFFFFFFF)
 )
@@ -102,12 +102,12 @@ data class ArticlePalette(val der: Color, val die: Color, val das: Color, val go
 }
 
 private val ArticlesDark = ArticlePalette(
-    der = Color(0xFF6FA8FF), die = Color(0xFFFF7A8A), das = Color(0xFF5ED39A),
-    good = Color(0xFF5ED39A), bad = Color(0xFFFF8A80)
+    der = Color(0xFF7FB0FF), die = Color(0xFFFF8597), das = Color(0xFF63D39C),
+    good = Color(0xFF63D39C), bad = Color(0xFFFF8597)
 )
 private val ArticlesLight = ArticlePalette(
-    der = Color(0xFF1F5FC9), die = Color(0xFFC0303F), das = Color(0xFF16834E),
-    good = Color(0xFF16834E), bad = Color(0xFFC0303F)
+    der = Color(0xFF2B6CC4), die = Color(0xFFD2475A), das = Color(0xFF1E9460),
+    good = Color(0xFF1E9460), bad = Color(0xFFD2475A)
 )
 
 val LocalArticles = staticCompositionLocalOf { ArticlesDark }
@@ -155,8 +155,8 @@ fun WortschatzTheme(dynamicColor: Boolean, themeMode: ThemeMode, content: @Compo
     val scheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        dark -> InkDark
-        else -> InkLight
+        dark -> JadranDark
+        else -> JadranLight
     }
 
     val view = LocalView.current

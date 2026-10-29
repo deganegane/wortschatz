@@ -9,7 +9,7 @@
     </style>
 
     <style name="Theme.Wortschatz.Starting" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#14213D</item>
+        <item name="windowSplashScreenBackground">#0B8A86</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash</item>
         <item name="postSplashScreenTheme">@style/Theme.Wortschatz</item>
     </style>

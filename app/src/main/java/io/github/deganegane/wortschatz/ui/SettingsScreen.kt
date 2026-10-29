@@ -236,7 +236,7 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
                 Choice(ThemeMode.entries, s.themeMode, { it.label }) { m -> vm.updateSettings { it.copy(themeMode = m) } }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     Spacer(Modifier.height(8.dp))
-                    ToggleRow("Boje iz pozadine", "Material You umjesto zlatne palete", s.dynamicColor) { v ->
+                    ToggleRow("Boje iz pozadine", "Material You umjesto palete Jadran", s.dynamicColor) { v ->
                         vm.updateSettings { it.copy(dynamicColor = v) }
                     }
                 }
