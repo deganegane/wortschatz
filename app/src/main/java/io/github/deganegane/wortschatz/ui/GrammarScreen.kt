@@ -3,6 +3,7 @@ package io.github.deganegane.wortschatz.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -52,9 +53,18 @@ fun GrammarScreen(vm: AppViewModel, state: UiState) {
     val cs = MaterialTheme.colorScheme
     val a = LocalArticles.current
     BackHandler { vm.closeGrammar() }
+    val swipe = rememberSwipeState()
+    val answeredNow = g.chosen != null && !g.finished
 
     Surface(Modifier.fillMaxSize(), color = cs.background) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                // Once answered: swipe right anywhere for the next sentence.
+                .swipeArea(swipe, enabled = answeredNow, key = g.index, allow = { it }) { right -> if (right) vm.grammarNext() }
+        ) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { vm.closeGrammar() }) { Icon(Icons.Filled.Close, contentDescription = "Zatvori") }
                 LinearProgressIndicator(
@@ -73,33 +83,19 @@ fun GrammarScreen(vm: AppViewModel, state: UiState) {
             val word = g.current?.let { state.word(it) }
             val gap = word?.gap
             if (g.finished || word == null || gap == null) {
-                Column(
-                    Modifier.fillMaxSize().padding(24.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    val total = g.correct + g.wrong
-                    Text(
-                        when {
-                            total == 0 -> "Nema rečenica"
-                            g.correct == total -> "Fehlerfrei!"
-                            g.correct >= total * 0.7 -> "Gut gemacht!"
-                            else -> "Weiter so!"
-                        },
-                        style = MaterialTheme.typography.displaySmall,
-                        color = cs.primary
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "${g.correct} od $total točno",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(32.dp))
-                    Button(onClick = { vm.closeGrammar() }, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Natrag") }
-                    Spacer(Modifier.height(10.dp))
-                    FilledTonalButton(onClick = { vm.startGrammar() }, modifier = Modifier.fillMaxWidth()) { Text("Još 10 rečenica") }
-                }
+                val total = g.correct + g.wrong
+                EndScreen(
+                    title = when {
+                        total == 0 -> "Nema rečenica"
+                        g.correct == total -> "Fehlerfrei!"
+                        g.correct >= total * 0.7 -> "Gut gemacht!"
+                        else -> "Weiter so!"
+                    },
+                    text = "${g.correct} od $total točno",
+                    again = "Još 10 rečenica",
+                    onAgain = { vm.startGrammar() },
+                    onBack = { vm.closeGrammar() }
+                )
                 return@Column
             }
 
@@ -120,8 +116,10 @@ fun GrammarScreen(vm: AppViewModel, state: UiState) {
                 Spacer(Modifier.height(16.dp))
                 Card(
                     shape = MaterialTheme.shapes.extraLarge,
-                    colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
+                    colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh),
+                    modifier = Modifier.swipeCard(swipe)
                 ) {
+                    Box {
                     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             sentenceWithGap(word, if (answered) gap.blank else null, if (correct) a.good else cs.primary),
@@ -154,6 +152,8 @@ fun GrammarScreen(vm: AppViewModel, state: UiState) {
                                 }
                             }
                         }
+                    }
+                    SwipeHint(swipe, left = null, right = "DALJE" to a.good)
                     }
                 }
             }
@@ -208,6 +208,7 @@ fun GrammarScreen(vm: AppViewModel, state: UiState) {
                         }
                         Spacer(Modifier.height(8.dp))
                     }
+                    SwipeLegend("povuci bilo gdje  ·  Dalje →")
                     Button(onClick = { vm.grammarNext() }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                         Text(if (g.index + 1 >= g.ranks.size) "Rezultat" else "Dalje", style = MaterialTheme.typography.titleMedium)
                     }

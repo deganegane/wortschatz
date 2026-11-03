@@ -32,7 +32,7 @@ export function SettingsScreen({ app, s, page, setPage, onBack }) {
       ['SPEAKING', 'var(--der)', st.quiet ? 'Tihi način uključen' : st.speakAnswers ? 'Odgovori glasom' + (st.repeatNew ? ' · ponovi nove' : '') : 'Bez mikrofona'],
       ['VOICE', 'var(--das)', (current ? current.label.split(' · ')[0] : 'Zadani glas') + (st.autoSpeak ? ' · automatski' : '')],
       ['BACKUP', 'var(--die)', 'Spremi ili vrati napredak'],
-      ['LOOK', 'var(--muted)', `Tema: ${THEMES.find((t) => t[0] === st.themeMode)[1].toLowerCase()} · paleta Jadran`],
+      ['LOOK', 'var(--muted)', `Tema: ${THEMES.find((t) => t[0] === st.themeMode)[1].toLowerCase()} · paleta Jadran` + (st.leftHanded ? ' · lijeva ruka' : '')],
     ];
     body = html`
       <div class="sp8"></div>
@@ -93,6 +93,9 @@ export function SettingsScreen({ app, s, page, setPage, onBack }) {
     body = html`<div class="panel padded">
       <${Info} title="Tema" />
       <${Segmented} options=${THEMES.map((t) => t[0])} value=${st.themeMode} label=${(m) => THEMES.find((t) => t[0] === m)[1]} onSelect=${(m) => set({ themeMode: m })} />
+      <div class="sp16"></div>
+      <${Info} title="Ruka" info="Na kojoj su strani mikrofon i tipka Dalje — tamo gdje palac lako dosegne. Swipe ostaje isti: desno je uvijek naprijed." />
+      <${Segmented} options=${[false, true]} value=${!!st.leftHanded} label=${(v) => (v ? 'Lijeva' : 'Desna')} onSelect=${(v) => set({ leftHanded: v })} />
     </div>`;
   }
 

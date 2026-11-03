@@ -54,6 +54,7 @@ export const DEFAULT_SETTINGS = {
   quiet: false,
   verifyKnown: true,
   strictReading: false,
+  leftHanded: false,
 };
 
 export const RATINGS = [

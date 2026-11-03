@@ -67,8 +67,14 @@ fun TestTab(vm: AppViewModel, state: UiState, onStartLearning: () -> Unit) {
         Modifier
             .fillMaxSize()
             // The whole screen is the swipe area, so the thumb can stay at the bottom.
-            .swipeArea(swipe, enabled = rank != null && verify == null, key = rank) { right ->
-                rank?.let { vm.testAnswer(it, right) }
+            .swipeArea(
+                swipe,
+                enabled = rank != null && (verify == null || verify.chosen != null),
+                key = rank to verify?.chosen,
+                // While checking a "znam": only right (Dalje), once a meaning has been picked.
+                allow = { right -> verify == null || right }
+            ) { right ->
+                if (verify != null) vm.verifyContinue() else rank?.let { vm.testAnswer(it, right) }
             }
     ) {
         Column(Modifier.fillMaxSize()) {
@@ -197,7 +203,7 @@ fun TestTab(vm: AppViewModel, state: UiState, onStartLearning: () -> Unit) {
                             ) { Text(opt, textAlign = TextAlign.Center) }
                         }
                         if (verify.chosen != null) {
-                            Spacer(Modifier.height(6.dp))
+                            SwipeLegend("povuci bilo gdje  ·  Dalje →")
                             Button(onClick = { vm.verifyContinue() }, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Dalje") }
                         }
                     }

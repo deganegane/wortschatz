@@ -435,6 +435,21 @@ export class App {
     if (tried) this.persist(null, days);
   }
 
+  /** Swipe left in shadowing: hear the sentence again, then the microphone turns on to repeat it. */
+  shadowAgain() {
+    const s = this.state;
+    const sh = s.shadowing;
+    const word = sh && this.word(sh.ranks[sh.index]);
+    if (!word) return;
+    this.listener.abort();
+    this.set({ shadowing: { ...sh, match: null, heard: '' }, listen: IDLE });
+    const micOk = this.recognition && !s.settings.quiet && !s.micBlocked;
+    this.speech.speak(word.example, s.settings.slowSpeech, () => {
+      const now = this.state.shadowing;
+      if (micOk && now && now.index === sh.index && !now.match) this.startListening('SHADOW', true);
+    });
+  }
+
   shadowRetry() {
     this.set((st) => ({ shadowing: st.shadowing && { ...st.shadowing, match: null, heard: '' }, listen: IDLE }));
   }

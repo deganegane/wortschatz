@@ -1,5 +1,5 @@
 import { html, useEffect, useState } from '../vendor/htm-preact.js';
-import { Headword, GrammarLine, ExampleBlock, Pill, ActionBar, ActionItem, Progress, useSwipe, SwipeHints } from '../ui.js';
+import { Headword, GrammarLine, ExampleBlock, Pill, ActionBar, ActionItem, Progress, useSwipe, SwipeHints, SwipeLegend } from '../ui.js';
 import { derive } from '../app-state.js';
 
 export function TestTab({ app, s, onStartLearning }) {
@@ -16,7 +16,13 @@ export function TestTab({ app, s, onStartLearning }) {
     if (word && s.settings.autoSpeak) app.speak(word.spoken);
   }, [rank]);
 
-  const swipe = useSwipe({ enabled: rank != null && !verify, key: rank, onDecide: (right) => rank != null && app.testAnswer(rank, right) });
+  // While checking a "znam": only right (Dalje), once a meaning has been picked.
+  const swipe = useSwipe({
+    enabled: rank != null && (!verify || verify.chosen != null),
+    key: `${rank}:${verify ? verify.chosen : ''}`,
+    allow: (right) => !verify || right,
+    onDecide: (right) => (verify ? app.verifyContinue() : rank != null && app.testAnswer(rank, right)),
+  });
 
   let bottom;
   if (!word) {
@@ -31,7 +37,7 @@ export function TestTab({ app, s, onStartLearning }) {
         if (answered) cls = i === verify.correct ? 'right' : i === verify.chosen ? 'wrong' : 'rest';
         return html`<button class=${'vopt ' + cls} disabled=${answered} onClick=${() => app.verifyChoose(i)}>${opt}</button>`;
       })}
-      ${answered && html`<div class="sp6"></div><button class="btn" onClick=${() => app.verifyContinue()}>Dalje</button>`}`;
+      ${answered && html`<${SwipeLegend} text="povuci bilo gdje  ·  Dalje →" /><button class="btn big" onClick=${() => app.verifyContinue()}>Dalje</button>`}`;
   } else {
     bottom = html`
       <${ActionBar}>

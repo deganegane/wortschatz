@@ -425,6 +425,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         persist(days = days)
     }
 
+    /** Swipe left in shadowing: hear the sentence again, then the microphone turns on to repeat it. */
+    fun shadowAgain() {
+        val s = _state.value
+        val sh = s.shadowing ?: return
+        val word = sh.current?.let { s.word(it) } ?: return
+        listener.stop()
+        _state.update { st -> st.copy(shadowing = st.shadowing?.copy(match = null, heard = ""), listen = ListenState()) }
+        val micOk = recognitionAvailable && !s.settings.quiet &&
+            androidx.core.content.ContextCompat.checkSelfPermission(getApplication(), android.Manifest.permission.RECORD_AUDIO) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        speech.speak(word.example, s.settings.slowSpeech, onDone = {
+            val now = _state.value.shadowing
+            if (micOk && now != null && now.index == sh.index && now.match == null) startListening(ListenFor.SHADOW)
+        })
+    }
+
     fun shadowRetry() {
         _state.update { st -> st.copy(shadowing = st.shadowing?.copy(match = null, heard = ""), listen = ListenState()) }
     }

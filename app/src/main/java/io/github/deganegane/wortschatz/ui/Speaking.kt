@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -197,15 +199,34 @@ fun MicRow(
     hint: String,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    left: @Composable () -> Unit
+    /** A minor action (Ne znam, Preskoči): on the far side from the thumb. */
+    secondary: (@Composable () -> Unit)? = null,
+    /** The main way on (Dalje): at the very edge on the thumb side, after the microphone. */
+    primary: (@Composable () -> Unit)? = null
 ) {
+    val leftHanded = LocalLeftHanded.current
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         ListenStatus(listen, hint)
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { left() }
-            MicButton(listen, onStart = onStart, onStop = onStop)
-            Spacer(Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (!leftHanded) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { secondary?.invoke() }
+                MicButton(listen, onStart = onStart, onStop = onStop)
+                if (primary != null) {
+                    Spacer(Modifier.width(8.dp))
+                    primary()
+                }
+            } else {
+                if (primary != null) {
+                    primary()
+                    Spacer(Modifier.width(8.dp))
+                }
+                MicButton(listen, onStart = onStart, onStop = onStop)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { secondary?.invoke() }
+            }
         }
     }
 }
+
+/** Mirrors the thumb-side controls (microphone, Dalje) for left-handed use. */
+val LocalLeftHanded = staticCompositionLocalOf { false }

@@ -70,7 +70,7 @@ function Root() {
       </nav>`;
   }
   const tabbed = !s.loading && !overlay && !settings;
-  return html`<div class=${'app' + (tabbed ? ' tabbed' : '') + (kb ? ' kb-open' : '')}>
+  return html`<div class=${'app' + (tabbed ? ' tabbed' : '') + (kb ? ' kb-open' : '') + (s.settings.leftHanded ? ' lefty' : '')}>
     ${content}
     ${s.toast && html`<div class="toast" role="status">${s.toast}</div>`}
   </div>`;

@@ -62,9 +62,9 @@ class SwipeState internal constructor(private val scope: CoroutineScope) {
         scope.launch { offset.snapTo(offset.value + delta) }
     }
 
-    internal fun release(onDecide: (right: Boolean) -> Unit) {
+    internal fun release(allow: (right: Boolean) -> Boolean, onDecide: (right: Boolean) -> Unit) {
         if (deciding) return
-        if (abs(offset.value) > threshold) {
+        if (abs(offset.value) > threshold && allow(offset.value > 0)) {
             deciding = true
             val right = offset.value > 0
             val target = if (right) width * 1.3f else -width * 1.3f
@@ -104,7 +104,14 @@ fun rememberSwipeState(): SwipeState {
 
 /** Detects horizontal drags anywhere on this element (vertical scrolling inside keeps working). */
 @Composable
-fun Modifier.swipeArea(state: SwipeState, enabled: Boolean, key: Any?, onDecide: (right: Boolean) -> Unit): Modifier {
+fun Modifier.swipeArea(
+    state: SwipeState,
+    enabled: Boolean,
+    key: Any?,
+    /** Directions that do something; a swipe the other way springs back. */
+    allow: (right: Boolean) -> Boolean = { true },
+    onDecide: (right: Boolean) -> Unit
+): Modifier {
     val haptic = LocalHapticFeedback.current
     return this
         .onSizeChanged { state.width = it.width.toFloat().coerceAtLeast(1f) }
@@ -114,7 +121,7 @@ fun Modifier.swipeArea(state: SwipeState, enabled: Boolean, key: Any?, onDecide:
             try {
                 detectHorizontalDragGestures(
                     onDragStart = { crossed = false },
-                    onDragEnd = { state.release(onDecide) },
+                    onDragEnd = { state.release(allow, onDecide) },
                     onDragCancel = { state.cancel() }
                 ) { change, delta ->
                     change.consume()
@@ -141,10 +148,10 @@ fun Modifier.swipeCard(state: SwipeState, current: Boolean = true): Modifier = g
 
 /** Coloured wash and label shown over the card while dragging. Draw it last inside the card's Box. */
 @Composable
-fun BoxScope.SwipeHint(state: SwipeState, left: Pair<String, Color>, right: Pair<String, Color>) {
+fun BoxScope.SwipeHint(state: SwipeState, left: Pair<String, Color>?, right: Pair<String, Color>?) {
     val p = state.progress
     if (p == 0f) return
-    val (label, color) = if (p > 0) right else left
+    val (label, color) = (if (p > 0) right else left) ?: return
     Box(Modifier.matchParentSize().background(color.copy(alpha = abs(p) * 0.22f)))
     Text(
         label,

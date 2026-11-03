@@ -1,7 +1,7 @@
 import { html, useEffect } from '../vendor/htm-preact.js';
 import {
   Icon, Headword, GrammarLine, ExampleBlock, Pill, ActionBar, ActionItem, TopBar, FeedbackBanner, MicRow,
-  highlighted, useSwipe, SwipeHints,
+  highlighted, useSwipe, SwipeHints, SwipeLegend,
 } from '../ui.js';
 import { derive } from '../app-state.js';
 import { Grade, GRADE_LABELS, Mode, POS_LABELS, Verdict, plural } from '../model.js';
@@ -53,14 +53,14 @@ export function ReviewScreen({ app, s }) {
   if (revealed) {
     controls = html`
       ${canRepeat && html`<${RepeatRow} app=${app} s=${s} word=${word} /><div class="sp8"></div>`}
-      <div class="label-s muted center" style="padding-bottom:6px">← Opet  ·  povuci bilo gdje  ·  Dobro →</div>
+      <${SwipeLegend} text="← Opet  ·  povuci bilo gdje  ·  Dobro →" />
       <${GradeButtons} app=${app} preview=${Srs.preview(s.cards[item.rank], s.today, s.settings.retention)}
         sug=${session.check ? suggested(session.check) : null} />`;
   } else if (useMic) {
     controls = html`<${MicRow} listen=${s.listen}
       hint=${item.mode === Mode.CLOZE ? 'Izgovori riječ koja fali (ili cijelu rečenicu)' : 'Reci riječ na njemačkom'}
       onStart=${() => app.listen()} onStop=${() => app.finishListening()}
-      left=${html`<button class="btn text" onClick=${() => app.reveal()}>Ne znam</button>`} />`;
+      secondary=${html`<button class="btn text" onClick=${() => app.reveal()}>Ne znam</button>`} />`;
   } else {
     controls = html`<button class="btn big" onClick=${() => app.reveal()}>Prikaži odgovor</button>`;
   }
@@ -184,18 +184,20 @@ function RepeatRow({ app, s, word }) {
     text = listen.error || 'Nešto je pošlo krivo.';
     color = 'var(--error)';
   }
-  return html`<div class="repeat">
-    <button class="speak" aria-label=${on ? 'Gotovo' : 'Ponovi naglas'} onClick=${() => (on ? app.finishListening() : app.listen())}>
-      <${Icon} name=${on ? 'stop' : 'mic'} size=${22} />
-    </button>
+  // The whole row is the button; the microphone sits on the thumb side (mirrored for left hands).
+  const toggle = () => (on ? app.finishListening() : app.listen());
+  return html`<div class="repeat" role="button" onClick=${toggle}>
     <div class="body-m grow" style=${`color:${color}`}>${text}</div>
+    <span class="speak" aria-label=${on ? 'Gotovo' : 'Ponovi naglas'}>
+      <${Icon} name=${on ? 'stop' : 'mic'} size=${22} />
+    </span>
   </div>`;
 }
 
 function Summary({ app, s }) {
   const ses = s.session;
   const d = derive(s);
-  return html`<div class="center-fill">
+  return html`<div class="col" style="flex:1;min-height:0"><div class="center-fill">
     ${ses.reviewed === 0
       ? html`<div class="h2">Nema ničega za ponavljanje</div>
         <div class="sp8"></div>
@@ -211,10 +213,11 @@ function Summary({ app, s }) {
         </div>
         <div class="sp12"></div>
         <div class="body-m muted">${d.streak} ${plural(d.streak, 'dan', 'dana', 'dana')} zaredom</div>`}
-    <div class="sp32"></div>
-    <button class="btn" onClick=${() => app.closeSession()}>Natrag</button>
-    ${d.newAvailable > 0 && html`<div class="sp10"></div><button class="btn tonal" onClick=${() => app.startSession(5)}>Još 5 novih riječi</button>`}
-  </div>`;
+  </div>
+  <div class="bottom">
+    ${d.newAvailable > 0 && html`<button class="btn tonal" onClick=${() => app.startSession(5)}>Još 5 novih riječi</button><div class="sp10"></div>`}
+    <button class="btn big" onClick=${() => app.closeSession()}>Natrag</button>
+  </div></div>`;
 }
 
 const Stat = ({ n, l }) => html`<div class="col" style="align-items:center"><div class="h2">${n}</div><div class="label muted">${l}</div></div>`;

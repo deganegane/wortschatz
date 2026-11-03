@@ -10,6 +10,8 @@ import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.deganegane.wortschatz.ui.AppScreen
+import io.github.deganegane.wortschatz.ui.LocalLeftHanded
+import androidx.compose.runtime.CompositionLocalProvider
 import io.github.deganegane.wortschatz.ui.WortschatzTheme
 
 class MainActivity : ComponentActivity() {
@@ -36,7 +38,9 @@ class MainActivity : ComponentActivity() {
                 if (state.session == null) vm.startSession()
             }
             WortschatzTheme(dynamicColor = state.settings.dynamicColor, themeMode = state.settings.themeMode) {
-                AppScreen(vm = vm, state = state)
+                CompositionLocalProvider(LocalLeftHanded provides state.settings.leftHanded) {
+                    AppScreen(vm = vm, state = state)
+                }
             }
         }
     }

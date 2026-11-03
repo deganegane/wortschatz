@@ -221,10 +221,9 @@ fun ReviewScreen(vm: AppViewModel, state: UiState) {
                             listen = state.listen,
                             hint = if (item.mode == Mode.CLOZE) "Izgovori riječ koja fali (ili cijelu rečenicu)" else "Reci riječ na njemačkom",
                             onStart = start,
-                            onStop = vm::finishListening
-                        ) {
-                            TextButton(onClick = { vm.reveal() }) { Text("Ne znam") }
-                        }
+                            onStop = vm::finishListening,
+                            secondary = { TextButton(onClick = { vm.reveal() }) { Text("Ne znam") } }
+                        )
                     }
                     else -> Button(onClick = { vm.reveal() }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                         Text("Prikaži odgovor", style = MaterialTheme.typography.titleMedium)
@@ -418,8 +417,9 @@ private fun SessionSummary(vm: AppViewModel, state: UiState) {
     val s = state.session ?: return
     val cs = MaterialTheme.colorScheme
     val moreAvailable = state.newAvailable > 0
+    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(bottom = 16.dp)) {
     Column(
-        Modifier.fillMaxSize().padding(24.dp),
+        Modifier.weight(1f).fillMaxWidth(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -449,14 +449,15 @@ private fun SessionSummary(vm: AppViewModel, state: UiState) {
                 color = cs.onSurfaceVariant
             )
         }
-        Spacer(Modifier.height(32.dp))
-        Button(onClick = { vm.closeSession() }, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Natrag") }
+    }
+        // Buttons at the bottom, within thumb reach.
         if (moreAvailable) {
-            Spacer(Modifier.height(10.dp))
-            FilledTonalButton(onClick = { vm.startSession(extraNew = 5) }, modifier = Modifier.fillMaxWidth()) {
+            FilledTonalButton(onClick = { vm.startSession(extraNew = 5) }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                 Text("Još 5 novih riječi")
             }
+            Spacer(Modifier.height(10.dp))
         }
+        Button(onClick = { vm.closeSession() }, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Natrag", style = MaterialTheme.typography.titleMedium) }
     }
 }
 
@@ -489,21 +490,34 @@ private fun RepeatRow(
         listen.phase == io.github.deganegane.wortschatz.ListenPhase.ERROR -> (listen.error ?: "Nešto je pošlo krivo.") to cs.error
         else -> "Ponovi riječ naglas" to cs.onSurfaceVariant
     }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(cs.surfaceContainer)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        FilledTonalIconButton(onClick = { if (listening) onStop() else onStart() }) {
+    val leftHanded = LocalLeftHanded.current
+    val toggle = { if (listening) onStop() else onStart() }
+    val micIcon = @Composable {
+        FilledTonalIconButton(onClick = toggle) {
             Icon(
                 painterResource(if (listening) io.github.deganegane.wortschatz.R.drawable.ic_stop else io.github.deganegane.wortschatz.R.drawable.ic_mic),
                 contentDescription = if (listening) "Gotovo" else "Ponovi naglas"
             )
         }
-        Spacer(Modifier.width(12.dp))
+    }
+    // The whole row is the button; the microphone sits on the thumb side.
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(cs.surfaceContainer)
+            .clickable(onClick = toggle)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (leftHanded) {
+            micIcon()
+            Spacer(Modifier.width(12.dp))
+        }
         Text(text, style = MaterialTheme.typography.bodyMedium, color = color, modifier = Modifier.weight(1f))
+        if (!leftHanded) {
+            Spacer(Modifier.width(12.dp))
+            micIcon()
+        }
     }
 }

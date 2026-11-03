@@ -56,6 +56,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.deganegane.wortschatz.AppViewModel
@@ -267,17 +268,25 @@ private fun StoryScreen(vm: AppViewModel, state: UiState, story: Story, onBack: 
                     }
                 }
                 Spacer(Modifier.height(24.dp))
-                RatingCard(rating) { vm.rateStory(story.id, it) }
-                val next = state.recommendedStory?.takeIf { it.id != story.id }
-                if (read && next != null) {
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedButton(onClick = { picked = null; onOpen(next.id) }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Sljedeće: ${next.title}")
-                    }
+                if (!read) {
+                    Text(
+                        "Kraj. Dodirni „Gotovo“ dolje i ocijeni ${if (story.isDialog) "dijalog" else "priču"}.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
                 Spacer(Modifier.height(24.dp))
             }
 
+            // Once read: rating and the next story pinned at the bottom, within thumb reach.
+            if (read) {
+                val next = state.recommendedStory?.takeIf { it.id != story.id }
+                RatingPanel(rating, next?.title?.takeIf { rating != null }, onRate = { vm.rateStory(story.id, it) }) {
+                    next?.let { picked = null; onOpen(it.id) }
+                }
+            }
             HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.5f))
             ActionBar(Modifier.background(cs.surfaceContainerLow).padding(vertical = 4.dp)) {
                 ActionItem(painterResource(R.drawable.ic_back), "Natrag") { onBack() }
@@ -319,26 +328,33 @@ private fun spokenStory(s: Story): String =
     if (!s.isDialog) s.de else s.de.lines().filter { it.isNotBlank() }.joinToString("\n") { it.substringAfter(": ", it) }
 
 @Composable
-private fun RatingCard(rating: StoryRating?, onRate: (StoryRating) -> Unit) {
+private fun RatingPanel(rating: StoryRating?, nextTitle: String?, onRate: (StoryRating) -> Unit, onNext: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    Card(shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = cs.surfaceContainer)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            Text(if (rating == null) "Kako ti je bilo?" else "Hvala! Prema tome biram sljedeću.", style = MaterialTheme.typography.titleSmall)
-            Text("Prema ocjeni se predlaže sljedeća priča.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StoryRating.entries.forEach { r ->
-                    val on = rating == r
-                    Button(
-                        onClick = { onRate(r) },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = ButtonDefaults.TextButtonContentPadding,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (on) cs.primary else cs.surfaceContainerHighest,
-                            contentColor = if (on) cs.onPrimary else cs.onSurface
-                        )
-                    ) { Text(r.label, maxLines = 1) }
-                }
+    Column(Modifier.fillMaxWidth().background(cs.surfaceContainerLow).padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Text(
+            if (rating == null) "Kako ti je bilo? Prema tome biram sljedeću." else "Ocjena spremljena",
+            style = MaterialTheme.typography.labelLarge,
+            color = cs.onSurfaceVariant
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StoryRating.entries.forEach { r ->
+                val on = rating == r
+                Button(
+                    onClick = { onRate(r) },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    contentPadding = ButtonDefaults.TextButtonContentPadding,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (on) cs.secondaryContainer else cs.surfaceContainerHighest,
+                        contentColor = if (on) cs.onSecondaryContainer else cs.onSurface
+                    )
+                ) { Text(r.label, maxLines = 1) }
+            }
+        }
+        if (nextTitle != null) {
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onNext, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Text("Sljedeće: $nextTitle", maxLines = 1, style = MaterialTheme.typography.titleSmall)
             }
         }
     }

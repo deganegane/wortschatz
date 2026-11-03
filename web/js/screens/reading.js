@@ -99,19 +99,18 @@ function StoryScreen({ app, s, story, onBack, onOpen }) {
         <div class="row" style="gap:8px;flex-wrap:wrap">
           ${story.newWords.slice(0, 5).map((w) => html`<${Pill} text=${w} bg="var(--s-high)" fg="var(--on)" onClick=${() => setPicked({ type: 'word', token: w })} />`)}
         </div>`}
-      <div class="sp24"></div>
-      <div class="card" style="padding:16px">
-        <div class="title-s">${rating ? 'Hvala! Prema tome biram sljedeću.' : 'Kako ti je bilo?'}</div>
-        <div class="body-s muted">Prema ocjeni se predlaže sljedeća priča.</div>
-        <div class="sp10"></div>
-        <div class="rate">
-          ${RATINGS.map(([r, label]) => html`<button class=${rating === r ? 'on' : ''} onClick=${() => app.rateStory(story.id, r)}>${label}</button>`)}
-        </div>
-      </div>
-      ${read && next && next.id !== story.id && html`<div class="sp10"></div>
-        <button class="btn outline" onClick=${() => onOpen(next.id)}>Sljedeće: ${next.title}</button>`}
+      ${!read && html`<div class="sp8"></div><div class="body-s muted center">Kraj. Dodirni „Gotovo“ dolje i ocijeni ${story.isDialog ? 'dijalog' : 'priču'}.</div>`}
       <div class="sp24"></div>
     </div>
+    ${read && html`<div class="rate-panel">
+      <div class="label muted">${rating ? 'Ocjena spremljena' : 'Kako ti je bilo? Prema tome biram sljedeću.'}</div>
+      <div class="sp8"></div>
+      <div class="rate">
+        ${RATINGS.map(([r, label]) => html`<button class=${rating === r ? 'on' : ''} onClick=${() => app.rateStory(story.id, r)}>${label}</button>`)}
+      </div>
+      ${rating && next && next.id !== story.id && html`<div class="sp8"></div>
+        <button class="btn" onClick=${() => onOpen(next.id)}>Sljedeće: ${next.title}</button>`}
+    </div>`}
     <${ActionBar} cls="pinned-bar">
       <${ActionItem} icon="back" label="Natrag" onClick=${onBack} />
       <${ActionItem} icon="volume" label="Poslušaj" onClick=${() => app.speak(speakable(story))} />

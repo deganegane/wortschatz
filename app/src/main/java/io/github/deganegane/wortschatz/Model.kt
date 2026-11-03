@@ -244,7 +244,9 @@ data class Settings(
     /** In the level test, confirm about every tenth "znam" with a multiple-choice meaning. */
     val verifyKnown: Boolean = true,
     /** Read stories without word lookups or translations. */
-    val strictReading: Boolean = false
+    val strictReading: Boolean = false,
+    /** Thumb-side controls on the left (microphone, Dalje). */
+    val leftHanded: Boolean = false
 ) {
     /** Microphone answers on speaking cards. */
     val micAnswers: Boolean get() = speakAnswers && !quiet

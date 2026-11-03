@@ -149,7 +149,7 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
                             Triple(SettingsPage.REMINDER, a.die,
                                 if (s.reminderOn) "Svaki dan u %02d:%02d".format(s.reminderHour, s.reminderMinute) else "Isključen"),
                             Triple(SettingsPage.LOOK, cs.onSurfaceVariant,
-                                "Tema: ${s.themeMode.label.lowercase()}" + if (s.dynamicColor) " · boje iz pozadine" else " · paleta Jadran")
+                                "Tema: ${s.themeMode.label.lowercase()}" + (if (s.dynamicColor) " · boje iz pozadine" else " · paleta Jadran") + if (s.leftHanded) " · lijeva ruka" else "")
                         )
                         rows.forEachIndexed { i, (p, color, summary) ->
                             if (i > 0) HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.6f), modifier = Modifier.padding(start = 56.dp))
@@ -286,6 +286,9 @@ fun SettingsScreen(vm: AppViewModel, state: UiState, onBack: () -> Unit) {
                             vm.updateSettings { it.copy(dynamicColor = v) }
                         }
                     }
+                    Spacer(Modifier.height(18.dp))
+                    InfoLabel("Ruka", "Na kojoj su strani mikrofon i tipka Dalje — tamo gdje palac lako dosegne. Swipe ostaje isti: desno je uvijek naprijed.")
+                    Choice(listOf(false, true), s.leftHanded, { if (it) "Lijeva" else "Desna" }) { v -> vm.updateSettings { it.copy(leftHanded = v) } }
                 }
             }
             Spacer(Modifier.height(24.dp))

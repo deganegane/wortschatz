@@ -210,14 +210,35 @@ export function ListenStatus({ listen, hint }) {
   return html`<div class=${'body-m center ' + (listen.phase === 'ERROR' ? 'err' : 'muted')} style="padding:0 8px">${text}</div>`;
 }
 
-export function MicRow({ listen, hint, onStart, onStop, left }) {
+/**
+ * Hint above; a minor action ([secondary]: Ne znam, Preskoči) on the far side, the microphone and
+ * an optional main action ([primary]: Dalje) on the thumb side. Mirrored for left-handed use (CSS).
+ */
+export function MicRow({ listen, hint, onStart, onStop, secondary, primary }) {
   return html`<div class="col" style="align-items:stretch">
     <${ListenStatus} listen=${listen} hint=${hint} />
     <div class="sp8"></div>
     <div class="microw">
-      <div class="side">${left}</div>
+      <div class="side">${secondary}</div>
       <${MicButton} listen=${listen} onStart=${onStart} onStop=${onStop} />
-      <div class="side"></div>
+      ${primary && html`<div class="prim">${primary}</div>`}
+    </div>
+  </div>`;
+}
+
+export const SwipeLegend = ({ text }) => html`<div class="label-s muted center" style="padding:6px 0">${text}</div>`;
+
+/** End of a round: the message in the middle, the buttons at the bottom within thumb reach. */
+export function EndScreen({ title, text, again, onAgain, onBack }) {
+  return html`<div class="col" style="flex:1;min-height:0">
+    <div class="center-fill">
+      <div class="display primary">${title}</div>
+      <div class="sp8"></div>
+      <div class="title-m">${text}</div>
+    </div>
+    <div class="bottom">
+      ${again && html`<button class="btn tonal" onClick=${onAgain}>${again}</button><div class="sp10"></div>`}
+      <button class="btn big" onClick=${onBack}>Natrag</button>
     </div>
   </div>`;
 }
@@ -249,7 +270,7 @@ export function FeedbackBanner({ check, word, cloze }) {
  * Swipe left/right anywhere on the screen (so the thumb can stay low) moves the card.
  * Returns props for the swipe area and a ref for the card that follows the finger.
  */
-export function useSwipe({ enabled, key, onDecide }) {
+export function useSwipe({ enabled, key, onDecide, allow = () => true }) {
   const card = useRef(null);
   const st = useRef({ deciding: false });
   const cb = useRef(onDecide);
@@ -314,7 +335,7 @@ export function useSwipe({ enabled, key, onDecide }) {
     const el = card.current;
     const w = (el && el.offsetWidth) || 300;
     const fling = Math.abs(s.v) > 0.6 && Math.abs(s.dx) > 40 && Math.sign(s.v) === Math.sign(s.dx);
-    if (e.type !== 'pointercancel' && (Math.abs(s.dx) > w * 0.25 || fling)) {
+    if (e.type !== 'pointercancel' && (Math.abs(s.dx) > w * 0.25 || fling) && allow(s.dx > 0)) {
       const right = s.dx > 0;
       s.deciding = true;
       if (navigator.vibrate) navigator.vibrate(12);
@@ -323,13 +344,13 @@ export function useSwipe({ enabled, key, onDecide }) {
       // belongs to the card that was swiped (and its guard rejects it).
       const decide = cb.current;
       setTimeout(() => st.current === s && decide(right), 170);
-      // If the answer was refused (the card didn't change), bring the card back.
+      // The card stayed (refused, or "ponovi"): bring it back.
       setTimeout(() => {
         if (st.current === s && s.deciding) {
           s.deciding = false;
           paint(0, true);
         }
-      }, 700);
+      }, 400);
     } else {
       paint(0, true);
     }

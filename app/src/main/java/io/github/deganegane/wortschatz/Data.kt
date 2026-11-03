@@ -129,7 +129,8 @@ class Store(ctx: Context) {
         repeatAll = prefs.getBoolean("repeatAll", false),
         quiet = prefs.getBoolean("quiet", false),
         verifyKnown = prefs.getBoolean("verifyKnown", true),
-        strictReading = prefs.getBoolean("strictReading", false)
+        strictReading = prefs.getBoolean("strictReading", false),
+        leftHanded = prefs.getBoolean("leftHanded", false)
     )
 
     fun saveSettings(s: Settings) {
@@ -153,6 +154,7 @@ class Store(ctx: Context) {
             .putBoolean("quiet", s.quiet)
             .putBoolean("verifyKnown", s.verifyKnown)
             .putBoolean("strictReading", s.strictReading)
+            .putBoolean("leftHanded", s.leftHanded)
             .apply()
     }
 
