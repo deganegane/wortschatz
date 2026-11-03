@@ -26,6 +26,10 @@ data class UiState(
     val testVerify: TestVerify? = null,
     val stories: List<Story> = emptyList(),
     val readIds: Set<String> = emptySet(),
+    /** Story ratings, oldest first. */
+    val ratings: Map<String, StoryRating> = emptyMap(),
+    /** The inflected-forms index for story lookups has loaded. */
+    val formsReady: Boolean = false,
     val listen: ListenState = ListenState(),
     /** Undo stack of the placement test: rank and the card it had before. */
     val testUndo: List<Triple<Int, Card?, Card>> = emptyList(),
@@ -65,6 +69,25 @@ data class UiState(
     }
 
     val storiesRead: Int get() = stories.count { it.id in readIds }
+
+    /**
+     * The story to read next: from the unlocked levels, ordered by difficulty, close to the last
+     * rated one — a step further after "prelagano", a step back after "preteško".
+     */
+    val recommendedStory: Story? by lazy {
+        val pool = stories.filter { it.level <= settings.level }.sortedBy { it.difficulty }
+        val unread = pool.filter { it.id !in readIds }
+        if (unread.isEmpty()) return@lazy null
+        val last = ratings.entries.lastOrNull()
+        val from = last?.let { (id, _) -> pool.indexOfFirst { it.id == id } } ?: -1
+        if (last == null || from < 0) return@lazy unread.first()
+        val target = from + when (last.value) {
+            StoryRating.EASY -> 4
+            StoryRating.OK -> 1
+            StoryRating.HARD -> -3
+        }
+        unread.minByOrNull { kotlin.math.abs(pool.indexOf(it) - target) }
+    }
 
     /** Known outright, mastered, or currently being learned. */
     val familiar: Int get() = count(Bucket.KNOWN) + count(Bucket.MASTERED) + count(Bucket.LEARNING)
@@ -146,6 +169,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             val stories = withContext(Dispatchers.IO) { WordRepo.loadStories(getApplication()) }
             val read = store.loadRead()
+            val ratings = store.loadRatings()
             _state.update {
                 allWords = loaded.first
                 it.copy(
@@ -156,6 +180,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     days = loaded.third,
                     stories = stories,
                     readIds = read,
+                    ratings = ratings,
                     today = today()
                 )
             }
@@ -532,7 +557,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun resetProgress() {
         store.resetProgress()
         _state.update {
-            it.copy(cards = emptyMap(), days = emptyMap(), readIds = emptySet(), testUndo = emptyList(), session = null, testVerify = null)
+            it.copy(cards = emptyMap(), days = emptyMap(), readIds = emptySet(), ratings = emptyMap(), testUndo = emptyList(), session = null, testVerify = null)
         }
     }
 
@@ -564,6 +589,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             forms = withContext(Dispatchers.IO) { WordRepo.loadForms(getApplication()) }
             formsLoading = false
+            _state.update { it.copy(formsReady = true) }
         }
     }
 
@@ -586,6 +612,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(readIds = read, days = days) }
         store.saveRead(read)
         persist(days = days)
+    }
+
+    /** "Prelagano / taman / preteško" after a story; also marks it read. */
+    fun rateStory(storyId: String, rating: StoryRating) {
+        markRead(storyId)
+        val ratings = LinkedHashMap(_state.value.ratings)
+        ratings.remove(storyId) // re-rating moves it to the end (most recent)
+        ratings[storyId] = rating
+        _state.update { it.copy(ratings = ratings) }
+        store.saveRatings(ratings)
+    }
+
+    /** A word tapped in a story goes to the front of the new words ("ne znam" comes first). */
+    fun addToLearning(rank: Int) {
+        val st = _state.value.cards[rank]?.status
+        if (st == Status.LEARNING || st == Status.TO_LEARN) return
+        setStatus(rank, Status.TO_LEARN)
     }
 
     // ---- Grammar round ----------------------------------------------------

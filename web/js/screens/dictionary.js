@@ -111,7 +111,7 @@ function WordSheet({ app, s, word }) {
   </div>`;
 }
 
-function statusText(b, card) {
+export function statusText(b, card) {
   if (b === 'UNTESTED') return 'Još nije prošla test';
   if (b === 'KNOWN') return 'Označena kao poznata';
   if (b === 'TO_LEARN') return 'Čeka na učenje';

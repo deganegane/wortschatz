@@ -256,7 +256,7 @@ private fun WordSheet(vm: AppViewModel, state: UiState, word: Word) {
     }
 }
 
-private fun statusText(b: Bucket, due: Long?): String = when (b) {
+internal fun statusText(b: Bucket, due: Long?): String = when (b) {
     Bucket.UNTESTED -> "Još nije prošla test"
     Bucket.KNOWN -> "Označena kao poznata"
     Bucket.TO_LEARN -> "Čeka na učenje"
@@ -267,7 +267,7 @@ private fun statusText(b: Bucket, due: Long?): String = when (b) {
     Bucket.ALL -> ""
 }
 
-private fun dueLabel(due: Long): String {
+internal fun dueLabel(due: Long): String {
     val today = LocalDate.now().toEpochDay()
     return when (val d = due - today) {
         in Long.MIN_VALUE..0L -> "danas"

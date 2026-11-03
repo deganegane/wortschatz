@@ -51,7 +51,21 @@ object WordRepo {
                 title = o.getString("title"),
                 de = o.getString("de"),
                 hr = o.optString("hr", ""),
-                newWords = o.optJSONArray("new")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
+                newWords = o.optJSONArray("new")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList(),
+                kind = o.optString("kind", "story"),
+                sentences = o.optJSONArray("p")?.let { ps ->
+                    List(ps.length()) { i ->
+                        val para = ps.getJSONArray(i)
+                        List(para.length()) { j -> para.getJSONArray(j).let { it.getString(0) to it.optString(1, "") } }
+                    }
+                } ?: emptyList(),
+                glosses = o.optJSONArray("gl")?.let { gs ->
+                    List(gs.length()) { i ->
+                        val g = gs.getJSONObject(i)
+                        val f = g.optJSONArray("f")
+                        Gloss(f?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList(), g.optString("de", ""), g.optString("hr", ""))
+                    }
+                } ?: emptyList()
             )
             }
         } catch (e: JSONException) {
@@ -114,7 +128,8 @@ class Store(ctx: Context) {
         repeatNew = prefs.getBoolean("repeatNew", true),
         repeatAll = prefs.getBoolean("repeatAll", false),
         quiet = prefs.getBoolean("quiet", false),
-        verifyKnown = prefs.getBoolean("verifyKnown", true)
+        verifyKnown = prefs.getBoolean("verifyKnown", true),
+        strictReading = prefs.getBoolean("strictReading", false)
     )
 
     fun saveSettings(s: Settings) {
@@ -137,6 +152,7 @@ class Store(ctx: Context) {
             .putBoolean("repeatAll", s.repeatAll)
             .putBoolean("quiet", s.quiet)
             .putBoolean("verifyKnown", s.verifyKnown)
+            .putBoolean("strictReading", s.strictReading)
             .apply()
     }
 
@@ -224,8 +240,31 @@ class Store(ctx: Context) {
         prefs.edit().putStringSet("read", ids).apply()
     }
 
+    // ---- Story ratings (in the order they were given) --------------------
+
+    fun loadRatings(): Map<String, StoryRating> {
+        val raw = prefs.getString("ratings", null) ?: return emptyMap()
+        return try {
+            val a = JSONArray(raw)
+            val out = LinkedHashMap<String, StoryRating>()
+            for (i in 0 until a.length()) {
+                val o = a.getJSONObject(i)
+                StoryRating.of(o.optInt("r"))?.let { out[o.getString("id")] = it }
+            }
+            out
+        } catch (e: JSONException) {
+            emptyMap()
+        }
+    }
+
+    fun saveRatings(ratings: Map<String, StoryRating>) {
+        val a = JSONArray()
+        for ((id, r) in ratings) a.put(JSONObject().put("id", id).put("r", r.code))
+        prefs.edit().putString("ratings", a.toString()).apply()
+    }
+
     fun resetProgress() {
-        prefs.edit().remove("cards").remove("days").remove("read").apply()
+        prefs.edit().remove("cards").remove("days").remove("read").remove("ratings").apply()
     }
 
     private inline fun <reified T : Enum<T>> enumOr(name: String?, fallback: T): T =

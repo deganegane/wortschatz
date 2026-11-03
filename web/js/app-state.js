@@ -54,9 +54,27 @@ export function derive(s) {
     hardWords: Srs.hardWords(s.cards).filter((r) => s.byRank.has(r)),
     hasGaps: vocab.some((w) => w.gap),
     storiesRead: s.stories.filter((x) => s.readIds.has(x.id)).length,
+    recommended: recommend(s),
   };
   cache.set(s, d);
   return d;
+}
+
+/**
+ * The story to read next: unlocked levels, ordered by difficulty, close to the last rated one —
+ * a step further after "prelagano", a step back after "preteško".
+ */
+function recommend(s) {
+  const pool = s.stories.filter((x) => x.level <= s.settings.level).sort((a, b) => a.difficulty - b.difficulty);
+  const unread = pool.filter((x) => !s.readIds.has(x.id));
+  if (!unread.length) return null;
+  const last = s.ratings[s.ratings.length - 1];
+  const from = last ? pool.findIndex((x) => x.id === last[0]) : -1;
+  if (from < 0) return unread[0];
+  const target = from + (last[1] === 1 ? 4 : last[1] === 2 ? 1 : -3);
+  let best = unread[0];
+  for (const x of unread) if (Math.abs(pool.indexOf(x) - target) < Math.abs(pool.indexOf(best) - target)) best = x;
+  return best;
 }
 
 export class App {
@@ -85,6 +103,7 @@ export class App {
       testVerify: null,
       stories: [],
       readIds: new Set(),
+      ratings: [],
       listen: IDLE,
       micBlocked: false,
       autoMicOff: false,
@@ -154,6 +173,7 @@ export class App {
         days: Store.loadDays(),
         stories: stories.map(makeStory),
         readIds: Store.loadRead(),
+        ratings: Store.loadRatings(),
         today: today(),
       });
       Store.askPersist();
@@ -538,7 +558,7 @@ export class App {
 
   resetProgress() {
     Store.resetProgress();
-    this.set({ cards: {}, days: {}, readIds: new Set(), testUndo: [], session: null, testVerify: null });
+    this.set({ cards: {}, days: {}, readIds: new Set(), ratings: [], testUndo: [], session: null, testVerify: null });
   }
 
   exportBackup() {
@@ -550,7 +570,8 @@ export class App {
     Store.saveCards(b.cards);
     Store.saveDays(b.days);
     Store.saveRead(b.read);
-    this.set({ cards: b.cards, days: b.days, readIds: b.read, testUndo: [], testVerify: null });
+    Store.saveRatings(b.ratings);
+    this.set({ cards: b.cards, days: b.days, readIds: b.read, ratings: b.ratings, testUndo: [], testVerify: null });
     this.updateSettings({ ...b.settings, voiceName: this.state.settings.voiceName });
     return Object.keys(b.cards).length;
   }
@@ -589,6 +610,21 @@ export class App {
     this.set({ readIds: read, days });
     Store.saveRead(read);
     this.persist(null, days);
+  }
+
+  /** "Prelagano / taman / preteško" after a story; also marks it read. */
+  rateStory(id, rating) {
+    this.markRead(id);
+    const ratings = this.state.ratings.filter((x) => x[0] !== id).concat([[id, rating]]);
+    this.set({ ratings });
+    Store.saveRatings(ratings);
+  }
+
+  /** A word tapped in a story goes to the new words ("ne znam" ones come first). */
+  addToLearning(rank) {
+    const c = this.state.cards[rank];
+    if (c && (c.status === Status.LEARNING || c.status === Status.TO_LEARN)) return;
+    this.setStatus(rank, Status.TO_LEARN);
   }
 
   // ---- grammar -----------------------------------------------------------

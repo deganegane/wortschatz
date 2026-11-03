@@ -91,7 +91,7 @@ const val PHRASE_RANK = 10000
 /** A fill-in-the-form exercise on a sentence: the blanked token, four options, hint and explanation. */
 data class Gap(val blank: String, val options: List<String>, val hint: String, val explanation: String)
 
-/** A graded mini-story (assets/stories.json). */
+/** A graded mini-story or dialogue (assets/stories.json). */
 data class Story(
     val id: String,
     val level: Int,
@@ -99,9 +99,39 @@ data class Story(
     val de: String,
     val hr: String,
     /** Words beyond the level's list that the story introduces. */
-    val newWords: List<String>
+    val newWords: List<String>,
+    /** "story" or "dialog". */
+    val kind: String = "story",
+    /** Paragraphs of [German, Croatian] sentence pairs; empty when the story has none. */
+    val sentences: List<List<Pair<String, String>>> = emptyList(),
+    /** Meanings of the words that aren't on the frequency list. */
+    val glosses: List<Gloss> = emptyList()
 ) {
-    val wordCount: Int get() = de.split(Regex("\\s+")).count { it.any(Char::isLetter) }
+    val wordCount: Int = de.split(Regex("\\s+")).count { it.any(Char::isLetter) }
+    val isDialog: Boolean get() = kind == "dialog"
+
+    /** Rough difficulty, used to suggest the next story: level first, then new words and length. */
+    val difficulty: Int get() = level * 100 + newWords.size * 6 + wordCount / 10
+
+    /** The gloss for a word as it appears in the text ("Staubsaugers"), if there is one. */
+    fun gloss(token: String): Gloss? {
+        val t = token.lowercase()
+        return glosses.firstOrNull { g -> g.forms.any { it.lowercase() == t } }
+    }
+}
+
+/** A word explained inside one story: its forms in the text, dictionary form and meaning. */
+data class Gloss(val forms: List<String>, val de: String, val hr: String)
+
+/** How a story felt, rated after reading it. */
+enum class StoryRating(val code: Int, val label: String) {
+    EASY(1, "Prelagano"),
+    OK(2, "Taman"),
+    HARD(3, "Preteško");
+
+    companion object {
+        fun of(code: Int) = entries.firstOrNull { it.code == code }
+    }
 }
 
 /** A "znam" in the level test being double-checked: pick the right meaning of four. */
@@ -212,7 +242,9 @@ data class Settings(
     /** Never use the microphone (public places): speaking cards are answered by revealing. */
     val quiet: Boolean = false,
     /** In the level test, confirm about every tenth "znam" with a multiple-choice meaning. */
-    val verifyKnown: Boolean = true
+    val verifyKnown: Boolean = true,
+    /** Read stories without word lookups or translations. */
+    val strictReading: Boolean = false
 ) {
     /** Microphone answers on speaking cards. */
     val micAnswers: Boolean get() = speakAnswers && !quiet

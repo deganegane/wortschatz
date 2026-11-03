@@ -53,7 +53,14 @@ export const DEFAULT_SETTINGS = {
   repeatAll: false,
   quiet: false,
   verifyKnown: true,
+  strictReading: false,
 };
+
+export const RATINGS = [
+  [1, 'Prelagano'],
+  [2, 'Taman'],
+  [3, 'Preteško'],
+];
 
 const LETTER = /[\p{L}]/u;
 
@@ -113,14 +120,28 @@ function clozeText(w) {
 
 export function makeStory(o) {
   const de = o.de || '';
+  const hr = o.hr || '';
+  const newWords = o.new || [];
+  const wordCount = de.split(/\s+/).filter((t) => LETTER.test(t)).length;
+  // Paragraphs of [German, Croatian] sentence pairs; older data: one "sentence" per paragraph.
+  let paragraphs = Array.isArray(o.p) && o.p.length ? o.p : null;
+  if (!paragraphs) {
+    const hrs = hr.split('\n').filter((p) => p.trim());
+    paragraphs = de.split('\n').filter((p) => p.trim()).map((p, i) => [[p, hrs[i] || '']]);
+  }
   return {
     id: o.id,
     level: o.level || 1,
+    kind: o.kind || 'story',
+    isDialog: o.kind === 'dialog',
     title: o.title,
     de,
-    hr: o.hr || '',
-    newWords: o.new || [],
-    wordCount: de.split(/\s+/).filter((t) => LETTER.test(t)).length,
+    hr,
+    newWords,
+    wordCount,
+    paragraphs,
+    glosses: (o.gl || []).map((g) => ({ forms: (g.f || []).map((f) => f.toLowerCase()), de: g.de || '', hr: g.hr || '' })),
+    difficulty: (o.level || 1) * 100 + newWords.length * 6 + Math.floor(wordCount / 10),
   };
 }
 

@@ -102,9 +102,16 @@ export const saveDays = (days) => put('days', JSON.stringify(daysToJson(days)));
 export const loadRead = () => new Set(parse(get('read'), []));
 export const saveRead = (ids) => put('read', JSON.stringify([...ids]));
 
+/** Story ratings in the order given: [[id, rating], ...]. */
+export const loadRatings = () => {
+  const a = parse(get('ratings'), []);
+  return Array.isArray(a) ? a.filter((x) => Array.isArray(x) && typeof x[0] === 'string' && [1, 2, 3].includes(x[1])) : [];
+};
+export const saveRatings = (r) => put('ratings', JSON.stringify(r));
+
 export function resetProgress() {
   try {
-    ['cards', 'days', 'read'].forEach((k) => localStorage.removeItem(P + k));
+    ['cards', 'days', 'read', 'ratings'].forEach((k) => localStorage.removeItem(P + k));
   } catch (e) {
     /* nothing stored */
   }
@@ -123,6 +130,7 @@ export function exportAll(state) {
     cards: cardsToJson(state.cards),
     days: daysToJson(state.days),
     read: [...state.readIds],
+    ratings: state.ratings,
   };
 }
 
@@ -135,6 +143,7 @@ export function parseBackup(text) {
     cards: cardsFromJson(o.cards),
     days: daysFromJson(o.days),
     read: new Set(Array.isArray(o.read) ? o.read : []),
+    ratings: Array.isArray(o.ratings) ? o.ratings.filter((x) => Array.isArray(x) && [1, 2, 3].includes(x[1])) : [],
   };
 }
 
